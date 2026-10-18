@@ -1728,6 +1728,16 @@ def main():
                 STATS["failed"] += 1
         log("summaries %s: %d" % (lg["slug"], done))
 
+    # 2b) permanent match archive — ended matches keep their URLs forever
+    import archive as archive_mod
+    ARCHIVE_DIR = os.path.join(HERE, "match_archive")
+    arc = archive_mod.load(ARCHIVE_DIR)
+    n_arc_before = sum(len(v) for v in arc.values())
+    archive_mod.merge(arc, all_matches, summaries)
+    kept, dropped = archive_mod.prune(arc)
+    log("archive: %d -> %d matches (%d dropped as older than %d days)"
+        % (n_arc_before, kept, dropped, archive_mod.ARCHIVE_KEEP_DAYS))
+
     # 3) standings (best effort)
     standings = {}
     for lg in leagues:
@@ -1754,13 +1764,34 @@ def main():
            (" errors: " + "; ".join(cricket_data.get("errors", [])))
            if cricket_data.get("errors") else ""))
 
-    # 5) render
+    # 5) render — from the permanent archive, so ended matches keep their
+    # URLs, stay in the sitemap and keep earning search traffic
     urls = []
     today = today_utc()
 
-    live = sorted([m for m in all_matches if m["state"] == "in"],
+    arch_summaries = {}
+    arch_all = []
+    arch_league_events = {}
+    for lg_slug, mid, rec in archive_mod.all_records(arc):
+        m, s = rec["m"], rec["s"]
+        arch_all.append(m)
+        arch_summaries[m["id"]] = s
+        arch_league_events.setdefault(lg_slug, []).append(m)
+    for lg_slug in arch_league_events:
+        arch_league_events[lg_slug].sort(
+            key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc),
+            reverse=True)
+    # team history from the archive (full results, not just this week)
+    teams = {}
+    for m in arch_all:
+        for t in (m["home"], m["away"]):
+            if t["id"]:
+                trec = teams.setdefault(t["id"], dict(t))
+                trec.setdefault("events", []).append(m)
+
+    live = sorted([m for m in arch_all if m["state"] == "in"],
                   key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
-    todays = sorted([m for m in all_matches
+    todays = sorted([m for m in arch_all
                      if m["date"] and m["date"].date() == today and m["state"] != "post"],
                     key=lambda m: m["date"])
     trend_html = trending_bar(live, todays)
@@ -1786,7 +1817,7 @@ def main():
         json.dump(search_index, f, separators=(",", ":"))
 
     for lg in leagues:
-        evs = league_events.get(lg["slug"], [])
+        evs = arch_league_events.get(lg["slug"], [])
         if not evs and not standings.get(lg["slug"]):
             continue
         urls.append(write_file("football/%s/index.html" % lg["slug"],
@@ -1794,9 +1825,19 @@ def main():
                                             trend_html)))
 
     n_match = 0
-    for m in all_matches:
-        rel = "football/%s/%s/index.html" % (m["league"]["slug"], match_slug(m))
-        urls.append(write_file(rel, build_match(m, summaries.get(m["id"]))))
+    n_skipped = 0
+    for m in arch_all:
+        lg_slug = m["league"]["slug"]
+        rec = arc[lg_slug][str(m["id"])]
+        h = "%s|v%d" % (rec["hash"], archive_mod.TEMPLATE_VERSION)
+        rel = "football/%s/%s/index.html" % (lg_slug, match_slug(m))
+        full = os.path.join(OUT_DIR, rel)
+        if rec.get("rendered_hash") == h and os.path.exists(full):
+            urls.append("/" + rel)  # unchanged — keep the sitemap entry
+            n_skipped += 1
+            continue
+        urls.append(write_file(rel, build_match(m, arch_summaries.get(m["id"]))))
+        rec["rendered_hash"] = h
         n_match += 1
 
     n_team = 0
@@ -1824,11 +1865,13 @@ def main():
     write_file("robots.txt",
                "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % BASE_URL)
 
+    archive_mod.save(ARCHIVE_DIR, arc)
+
     el = time.time() - start
-    log("DONE in %.0fs — leagues ok: %d/%d, matches: %d, teams: %d, "
-        "summaries: %d, cricket: %d matches, urls: %d"
+    log("DONE in %.0fs — leagues ok: %d/%d, matches: %d rendered (%d skipped), "
+        "teams: %d, summaries: %d, cricket: %d matches, urls: %d"
         % (el, len(leagues) - len(STATS["failed_leagues"]), len(leagues),
-           n_match, n_team, STATS["summaries"], len(cmatches), len(urls)))
+           n_match, n_skipped, n_team, STATS["summaries"], len(cmatches), len(urls)))
     if STATS["failed_leagues"]:
         log("failed leagues: %s" % ", ".join(STATS["failed_leagues"]))
     return 0
