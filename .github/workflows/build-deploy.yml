@@ -1,0 +1,39 @@
+name: ScoreBuzz build and deploy
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore caches (cricket + match archive + dist)
+        uses: actions/cache@v4
+        with:
+          path: |
+            scorebuzz/cricket_cache
+            scorebuzz/match_archive
+            scorebuzz/dist
+          key: scorebuzz-cache-v1
+
+      - name: Build site
+        env:
+          CRICAPI_KEY: ${{ secrets.CRICAPI_KEY }}
+        run: |
+          cd scorebuzz && python3 generate.py
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy scorebuzz/dist --project-name=scorebuzz --commit-dirty=true
