@@ -16,11 +16,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore cricket cache
+      - name: Restore caches (cricket + match archive + dist)
         uses: actions/cache@v4
         with:
-          path: scorebuzz/cricket_cache
-          key: cricket-cache-v1
+          path: |
+            scorebuzz/cricket_cache
+            scorebuzz/match_archive
+            scorebuzz/dist
+          key: scorebuzz-cache-v1
 
       - name: Build site
         env:
