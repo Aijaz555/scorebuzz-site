@@ -31,9 +31,46 @@ jobs:
         run: |
           cd scorebuzz && python3 generate.py
 
+      - name: IndexNow key file
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          if [ -n "$INDEXNOW_KEY" ]; then
+            echo -n "$INDEXNOW_KEY" > "scorebuzz/dist/$INDEXNOW_KEY.txt"
+          fi
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy scorebuzz/dist --project-name=scorebuzz --commit-dirty=true
+
+      - name: IndexNow ping (changed URLs)
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          if [ -z "$INDEXNOW_KEY" ]; then echo "indexnow: no key, skipping"; exit 0; fi
+          python3 - <<'PYEOF_INNER'
+          import json, os, urllib.request
+          key = os.environ["INDEXNOW_KEY"]
+          try:
+              urls = json.load(open("scorebuzz/indexnow-queue.json"))
+          except OSError:
+              urls = []
+          if not urls:
+              print("indexnow: no changed URLs, skipping")
+              raise SystemExit
+          payload = json.dumps({
+              "host": "scorebuzz.net",
+              "key": key,
+              "keyLocation": "https://scorebuzz.net/%s.txt" % key,
+              "urlList": urls[:10000],
+          }).encode()
+          req = urllib.request.Request("https://api.indexnow.org/indexnow",
+                                       data=payload,
+                                       headers={"Content-Type": "application/json"})
+          with urllib.request.urlopen(req, timeout=30) as r:
+              print("indexnow: submitted %d URLs, HTTP %s"
+                    % (min(len(urls), 10000), r.status))
+          PYEOF_INNER
