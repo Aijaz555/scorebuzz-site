@@ -796,11 +796,20 @@ document.addEventListener('DOMContentLoaded',paint);paint();
                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))
 
 
+CHANGED_URLS = []  # pages whose HTML actually changed this build (for IndexNow)
+
 def write_file(rel_path, content):
     full = os.path.join(OUT_DIR, rel_path.lstrip("/"))
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(content)
+    try:
+        with open(full, "r", encoding="utf-8") as f:
+            old = f.read()
+    except OSError:
+        old = None
+    if old != content:
+        with open(full, "w", encoding="utf-8") as f:
+            f.write(content)
+        CHANGED_URLS.append(BASE_URL + "/" + rel_path.lstrip("/"))
     return "/" + rel_path.lstrip("/")
 
 
@@ -2481,6 +2490,14 @@ def main():
         write_file(fn, build_sitemap(match_urls[i:i + SITEMAP_MATCH_CHUNK]))
         sitemap_files.append(fn)
     write_file("sitemap.xml", build_sitemapindex(sitemap_files))
+
+    # IndexNow queue: changed page URLs for the post-deploy ping (cap 10k)
+    try:
+        with open(os.path.join(HERE, "indexnow-queue.json"), "w", encoding="utf-8") as f:
+            json.dump(CHANGED_URLS[:10000], f)
+        log("indexnow: %d changed URLs queued" % min(len(CHANGED_URLS), 10000))
+    except Exception as e:
+        log("indexnow queue write failed: %s" % e)
     log("sitemap: %d main urls, %d match urls in %d match files"
         % (len(main_urls), len(match_urls), len(sitemap_files) - 1))
     write_file("robots.txt",
