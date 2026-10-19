@@ -29,6 +29,7 @@ except ImportError:
 
 BASE_URL = "https://scorebuzz.net"
 SITE_NAME = "ScoreBuzz"
+GA_MEASUREMENT_ID = "G-3HJBET23YB"  # GA4 property "ScoreBuzz Web" (leonmessi account)
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "dist")
 
@@ -74,6 +75,36 @@ LEAGUES = [
     ("soccer", "ind.1", "Indian Super League", "indian-super-league", "Football", "soccer"),
     ("soccer", "uefa.nations", "UEFA Nations League", "uefa-nations-league", "Football", "soccer"),
     ("soccer", "fifa.worldcup", "FIFA World Cup", "fifa-world-cup", "Football", "soccer"),
+    ("soccer", "eng.w.1", "Women's Super League", "womens-super-league", "Football", "soccer"),
+    ("soccer", "usa.w.1", "NWSL", "nwsl", "Football", "soccer"),
+    ("soccer", "fra.w.1", "Première Ligue", "premiere-ligue", "Football", "soccer"),
+    ("soccer", "esp.w.1", "Liga F", "liga-f", "Football", "soccer"),
+    ("soccer", "sco.1", "Scottish Premiership", "scottish-premiership", "Football", "soccer"),
+    ("soccer", "den.1", "Danish Superliga", "danish-superliga", "Football", "soccer"),
+    ("soccer", "nor.1", "Norwegian Eliteserien", "eliteserien", "Football", "soccer"),
+    ("soccer", "swe.1", "Swedish Allsvenskan", "allsvenskan", "Football", "soccer"),
+    ("soccer", "sui.1", "Swiss Super League", "swiss-super-league", "Football", "soccer"),
+    ("soccer", "aut.1", "Austrian Bundesliga", "austrian-bundesliga", "Football", "soccer"),
+    ("soccer", "bel.1", "Belgian Pro League", "belgian-pro-league", "Football", "soccer"),
+    ("soccer", "gre.1", "Greek Super League", "greek-super-league", "Football", "soccer"),
+    ("soccer", "rou.1", "Romanian Liga I", "romanian-liga-1", "Football", "soccer"),
+    ("soccer", "chn.1", "Chinese Super League", "chinese-super-league", "Football", "soccer"),
+    ("soccer", "conmebol.libertadores", "Copa Libertadores", "copa-libertadores", "Football", "soccer"),
+    ("soccer", "conmebol.sudamericana", "Copa Sudamericana", "copa-sudamericana", "Football", "soccer"),
+    ("soccer", "chi.1", "Chilean Primera División", "chile-primera-division", "Football", "soccer"),
+    ("soccer", "col.1", "Colombian Primera A", "colombia-primera-a", "Football", "soccer"),
+    ("soccer", "ecu.1", "LigaPro Ecuador", "ligapro-ecuador", "Football", "soccer"),
+    ("soccer", "per.1", "Peruvian Liga 1", "peru-liga-1", "Football", "soccer"),
+    ("soccer", "uru.1", "Liga AUF Uruguaya", "uruguay-primera-division", "Football", "soccer"),
+    ("soccer", "par.1", "Paraguayan Primera División", "paraguay-primera-division", "Football", "soccer"),
+    ("soccer", "ven.1", "Venezuelan Primera División", "venezuela-primera-division", "Football", "soccer"),
+    ("soccer", "crc.1", "Costa Rican Primera División", "costa-rica-primera-division", "Football", "soccer"),
+    ("soccer", "wal.1", "Welsh Premier League", "welsh-premier-league", "Football", "soccer"),
+    ("soccer", "nir.1", "Northern Irish Premiership", "northern-irish-premiership", "Football", "soccer"),
+    ("soccer", "irl.1", "Irish Premier Division", "league-of-ireland", "Football", "soccer"),
+    ("soccer", "cyp.1", "Cypriot First Division", "cyprus-first-division", "Football", "soccer"),
+    ("soccer", "isr.1", "Israeli Premier League", "israeli-premier-league", "Football", "soccer"),
+    ("soccer", "ned.w.1", "Dutch Vrouwen Eredivisie", "vrouwen-eredivisie", "Football", "soccer"),
 ]
 # NOTE: /cricket/<series-slug>/<match-slug>-<id>/ URL space is RESERVED for a
 # future cricket feed integration. Do not use /cricket/ for anything else.
@@ -90,7 +121,20 @@ LEAGUE_WEIGHT = {
     "liga-mx": 62, "brasileirao": 66, "argentina-primera-division": 60,
     "super-lig": 64, "saudi-pro-league": 63, "j-league": 52, "k-league-1": 50,
     "a-league": 48, "indian-super-league": 45, "uefa-nations-league": 75,
-    "fifa-world-cup": 90,
+    "fifa-world-cup": 90, "womens-super-league": 55, "nwsl": 52,
+    "premiere-ligue": 48, "liga-f": 48, "scottish-premiership": 58,
+    "danish-superliga": 50, "eliteserien": 50, "allsvenskan": 50,
+    "swiss-super-league": 52, "austrian-bundesliga": 52,
+    "belgian-pro-league": 54, "greek-super-league": 50,
+    "romanian-liga-1": 46, "chinese-super-league": 44,
+    "copa-libertadores": 72, "copa-sudamericana": 62,
+    "chile-primera-division": 50, "colombia-primera-a": 52,
+    "ligapro-ecuador": 48, "peru-liga-1": 48, "uruguay-primera-division": 50,
+    "paraguay-primera-division": 46, "venezuela-primera-division": 46,
+    "costa-rica-primera-division": 44, "welsh-premier-league": 42,
+    "northern-irish-premiership": 42, "league-of-ireland": 44,
+    "cyprus-first-division": 44, "israeli-premier-league": 46,
+    "vrouwen-eredivisie": 44,
 }
 DERBY_BONUS = 40
 # Famous rivalry pairs (lowercase substrings matched against team names).
@@ -273,11 +317,16 @@ def parse_summary(data, m):
         c = ke.get("clock") or {}
         if isinstance(c, dict):
             clock = c.get("displayValue") or ""
+        cval = c.get("value") if isinstance(c, dict) else None
+        team = ke.get("team") or {}
         out["commentary"].append({
             "clock": clock,
+            "clock_sec": cval if isinstance(cval, (int, float)) else None,
             "period": (ke.get("period") or {}).get("number") if isinstance(ke.get("period"), dict) else "",
             "type": ((ke.get("type") or {}).get("text") if isinstance(ke.get("type"), dict) else "") or "",
             "scoring": bool(ke.get("scoringPlay")),
+            "team_id": str(team.get("id") or ""),
+            "team_name": team.get("displayName") or "",
             "text": text,
         })
     # generic 'commentary' list fallback
@@ -402,6 +451,10 @@ def parse_summary(data, m):
                 out["h2h"].append({
                     "date": (ge.get("date") or "")[:10],
                     "line": line,
+                    "t0": str((gcs[0].get("team") or {}).get("id") or ""),
+                    "s0": gcs[0].get("score"),
+                    "t1": str((gcs[1].get("team") or {}).get("id") or ""),
+                    "s1": gcs[1].get("score"),
                 })
 
     # --- key players / stat leaders ---
@@ -662,6 +715,19 @@ def jsonld_breadcrumbs(items):
             "itemListElement": els}
 
 
+def ga_snippet():
+    if not GA_MEASUREMENT_ID:
+        return ""
+    return ("""
+<script async src="https://www.googletagmanager.com/gtag/js?id=%s"></script>
+<script>
+window.dataLayer=window.dataLayer||[];
+function gtag(){dataLayer.push(arguments);}
+gtag('js',new Date());
+gtag('config','%s');
+</script>""" % (GA_MEASUREMENT_ID, GA_MEASUREMENT_ID))
+
+
 def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
     canon = BASE_URL + path
     scripts = [jsonld_breadcrumbs(crumbs)]
@@ -670,10 +736,10 @@ def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
     ld = "\n".join(
         '<script type="application/ld+json">%s</script>' % json.dumps(s)
         for s in scripts)
-    nav = "".join('<a href="/football/">Leagues</a>' for _ in [0])
+    nav = "".join('<a href="/leagues/">Leagues</a>' for _ in [0])
     nav += '<a href="/cricket/">Cricket</a>'
     sport_links = "".join(
-        '<a href="/football/#%s">%s</a>' % (slugify(s), esc(s))
+        '<a href="/%s/">%s</a>' % (slugify(s), esc(s))
         for s in SPORTS_NAV)
     return """<!DOCTYPE html>
 <html lang="en">
@@ -688,6 +754,7 @@ def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
 <meta property="og:title" content="%s">
 <meta property="og:description" content="%s">
 <meta property="og:url" content="%s">
+%s
 <style>%s</style>
 %s
 </head>
@@ -725,7 +792,7 @@ document.addEventListener('DOMContentLoaded',paint);paint();
 </script>
 </body>
 </html>""" % (esc(title), esc(desc), canon, esc(title), esc(desc), canon,
-               CSS, ld, nav, sport_links, body_html,
+               ga_snippet(), CSS, ld, nav, sport_links, body_html,
                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))
 
 
@@ -842,42 +909,243 @@ def build_leagues_index(leagues):
     return page("All Leagues — Fixtures, Results & Standings | ScoreBuzz",
                 "Browse every league on ScoreBuzz: football, NFL, NBA, NHL, MLB, "
                 "tennis and MMA fixtures, results and standings.",
-                "/football/", [("Home", "/"), ("Leagues", "/football/")],
+                "/leagues/", [("Home", "/"), ("Leagues", "/leagues/")],
                 "\n".join(body))
 
 
-def build_home(live, todays, leagues, trend_html=""):
-    body = [trend_html, "<h1>Live Scores &amp; Fixtures</h1>"]
+def _group_by_day(matches):
+    """Group matches by date -> sorted list of (date, {league_slug: [matches]})."""
+    by_day = {}
+    for m in matches:
+        d = m["date"].date() if m["date"] else None
+        by_day.setdefault(d, {}).setdefault(m["league"]["slug"], []).append(m)
+    return sorted(by_day.items(), key=lambda kv: (kv[0] is None, kv[0]))
+
+
+def _day_label(d, today):
+    if d is None:
+        return "Scheduled"
+    if d == today:
+        return "Today"
+    if d == today + timedelta(days=1):
+        return "Tomorrow"
+    if d == today - timedelta(days=1):
+        return "Yesterday"
+    return fmt_date(datetime(d.year, d.month, d.day, tzinfo=timezone.utc))
+
+
+def build_sport_page(sport_label, sport_slug, sport_leagues, events):
+    """Clean category page: /<sport-slug>/ with that sport's leagues + fixtures."""
+    today = today_utc()
+    live = [m for m in events if m["state"] == "in"]
+    upcoming = sorted(
+        [m for m in events if m["state"] == "pre" and m["date"]
+         and today <= m["date"].date() <= today + timedelta(days=7)],
+        key=lambda m: m["date"])
+    recent = sorted(
+        [m for m in events if m["state"] == "post" and m["date"]
+         and today - timedelta(days=3) <= m["date"].date() <= today],
+        key=lambda m: m["date"], reverse=True)
+    path = "/%s/" % sport_slug
+    crumbs = [("Home", "/"), (sport_label, path)]
+    body = ["<h1>%s Scores &amp; Fixtures</h1>" % esc(sport_label)]
     if live:
-        body.append('<div class="card"><span class="badge live">● LIVE NOW</span>')
+        body.append('<div class="card"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+                    % len(live))
+        body += [match_row(m) for m in live]
+        body.append("</div>")
+    if sport_leagues:
+        body.append("<h2>Leagues</h2><div class='card'>")
+        for lg in sport_leagues:
+            body.append('<p><a href="/football/%s/">%s</a> '
+                        '<span class="meta">\u2014 fixtures, results, standings</span></p>'
+                        % (lg["slug"], esc(lg["name"])))
+        body.append("</div>")
+    if upcoming:
+        body.append("<h2>Upcoming Fixtures</h2>")
+        for d, by_league in _group_by_day(upcoming):
+            body.append('<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
+                        % esc(_day_label(d, today)))
+            for slug in sorted(by_league):
+                ms = sorted(by_league[slug],
+                            key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+                lg = next((l for l in sport_leagues if l["slug"] == slug), None)
+                body.append('<div class="card"><h3 style="font-size:15px;margin-bottom:4px">'
+                            '<a href="/football/%s/">%s</a></h3>'
+                            % (slug, esc(lg["name"] if lg else slug)))
+                body += [match_row(m) for m in ms]
+                body.append("</div>")
+    if recent:
+        body.append("<h2>Recent Results</h2>")
+        for d, by_league in _group_by_day(recent):
+            body.append('<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
+                        % esc(_day_label(d, today)))
+            for slug in sorted(by_league):
+                ms = sorted(by_league[slug],
+                            key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
+                            reverse=True)
+                lg = next((l for l in sport_leagues if l["slug"] == slug), None)
+                body.append('<div class="card"><h3 style="font-size:15px;margin-bottom:4px">'
+                            '<a href="/football/%s/">%s</a></h3>'
+                            % (slug, esc(lg["name"] if lg else slug)))
+                body += [match_row(m) for m in ms]
+                body.append("</div>")
+    return page("%s Scores, Fixtures & Results | ScoreBuzz" % sport_label,
+                "Live %s scores, upcoming fixtures, results, lineups and stats on ScoreBuzz."
+                % sport_label.lower(),
+                path, crumbs, "\n".join(body))
+
+
+_MOTD_LEAGUE_RANK = [
+    "uefa.champions", "eng.1", "esp.1", "ita.1", "ger.1", "fra.1",
+    "uefa.europa", "conmebol.libertadores", "usa.1", "mex.1", "bra.1",
+    "arg.1", "ned.1", "por.1", "nfl", "nba", "nhl", "mlb",
+]
+
+
+def _league_rank(slug):
+    try:
+        return _MOTD_LEAGUE_RANK.index(slug)
+    except ValueError:
+        return 999
+
+
+def _match_of_day(live, upcoming):
+    """The single featured match: top live game, else the biggest fixture today."""
+    cands = [m for m in (live or []) if m.get("date")]
+    if not cands:
+        today = today_utc()
+        cands = [m for m in (upcoming or [])
+                 if m.get("date") and m["date"].date() == today]
+    if not cands:
+        cands = list(upcoming or [])[:1]
+    if not cands:
+        return None
+    return sorted(cands, key=lambda m: (_league_rank(m["league"]["slug"]),
+                                       m["date"] or datetime.max.replace(tzinfo=timezone.utc)))[0]
+
+
+def _motd_html(m, lg_name):
+    """Big featured card: Match of the Day."""
+    lg = m["league"]
+    live = m["state"] == "in"
+    hs, aws = m["home"].get("score"), m["away"].get("score")
+    if hs is None:
+        mid = '<div class="motd-vs">vs</div><div class="motd-ko">%s</div>' % esc(fmt_time(m["date"]))
+    else:
+        mid = ('<div class="motd-score">%s<span>-</span>%s</div>'
+               % (esc(hs), esc(aws)))
+    badge = ('<span class="badge live">\u25cf LIVE</span>' if live
+             else '<span class="badge">%s</span>' % esc(_day_label(m["date"].date(), today_utc())
+                                                       if m.get("date") else ""))
+    return ("""<div class='card motd'><div class='motd-tag'>\u2605 Match of the Day %s</div>
+<div class='motd-teams'>
+<a href='%s' class='motd-team'>%s<span>%s</span></a>
+<div class='motd-mid'>%s</div>
+<a href='%s' class='motd-team'>%s<span>%s</span></a>
+</div>
+<div class='motd-lg'><a href='/football/%s/'>%s</a></div></div>"""
+            % (badge, match_path(m), team_img(m["home"], 64), esc(m["home"]["name"]),
+               mid, match_path(m), team_img(m["away"], 64), esc(m["away"]["name"]),
+               lg["slug"], esc(lg_name.get(lg["slug"], lg["name"]))))
+
+
+_MOTD_CSS = """
+.motd{padding:18px;text-align:center}
+.motd-tag{font-size:12px;font-weight:700;color:#b8860b;letter-spacing:.4px;margin-bottom:10px}
+.motd-teams{display:flex;align-items:center;justify-content:center;gap:18px}
+.motd-team{display:flex;flex-direction:column;align-items:center;gap:8px;color:inherit;
+text-decoration:none;font-weight:700;font-size:15px;max-width:38%}
+.motd-mid{display:flex;flex-direction:column;align-items:center;gap:4px}
+.motd-vs{font-size:13px;color:var(--mut)}
+.motd-ko{font-size:14px;font-weight:700}
+.motd-score{font-size:30px;font-weight:800}.motd-score span{margin:0 8px;color:var(--mut)}
+.motd-lg{margin-top:10px;font-size:12px;color:var(--mut)}
+.sport-h{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:15px;font-weight:700}
+.sport-h .cnt{font-size:12px;font-weight:600;color:var(--mut);background:var(--bg2);
+padding:2px 9px;border-radius:20px}
+"""
+
+
+def _sport_of(m):
+    return (m["league"].get("sport") or "football").lower()
+
+
+_SPORT_LABEL = {"football": "Football", "nfl": "American Football", "nba": "Basketball",
+                "nhl": "Ice Hockey", "mlb": "Baseball", "tennis": "Tennis", "mma": "MMA",
+                "cricket": "Cricket"}
+
+
+def build_home(live, upcoming, recent, leagues, trend_html=""):
+    lg_name = {l["slug"]: l["name"] for l in leagues}
+    today = today_utc()
+    body = [trend_html, "<style>%s</style>" % _MOTD_CSS, "<h1>Live Scores &amp; Fixtures</h1>"]
+
+    motd = _match_of_day(live, upcoming)
+    if motd:
+        body.append(_motd_html(motd, lg_name))
+
+    if live:
+        body.append('<div class="card"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+                    % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
     else:
         body.append('<div class="card"><span class="badge">No live matches right now</span>'
-                    "<p class=\"meta\">Live scores appear here the moment games kick off. "
-                    "Browse today's fixtures below.</p></div>")
-    if todays:
-        body.append("<h2>Today's Matches</h2>")
-        by_league = {}
-        for m in todays:
-            by_league.setdefault(m["league"]["slug"], []).append(m)
-        for slug in sorted(by_league,
-                           key=lambda s: next(l["name"] for l in leagues
-                                              if l["slug"] == s)):
-            lg = next(l for l in leagues if l["slug"] == slug)
-            ms = by_league[slug]
-            body.append('<div class="card"><h3 style="font-size:15px;margin-bottom:4px">'
-                        '<a href="/football/%s/">%s</a></h3>' % (slug, esc(lg["name"])))
-            body += [match_row(m) for m in ms]
-            body.append("</div>")
+                    '<p class="meta">Live scores appear here the moment games kick off. '
+                    "Browse upcoming fixtures below.</p></div>")
+
+    def by_sport(matches):
+        out = {}
+        for m in matches:
+            out.setdefault(_sport_of(m), []).append(m)
+        return out
+
+    if upcoming:
+        body.append("<h2>Upcoming Fixtures</h2>")
+        for sport in sorted(by_sport(upcoming),
+                            key=lambda s: (0 if s == "football" else 1, s)):
+            ms = by_sport(upcoming)[sport]
+            body.append('<div class="sport-h">%s <span class="cnt">%d %s</span></div>'
+                        % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
+                           "match" if len(ms) == 1 else "matches"))
+            for d, by_league in _group_by_day(ms):
+                body.append('<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                            % esc(_day_label(d, today)))
+                for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
+                    lms = sorted(by_league[slug],
+                                 key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+                    body.append('<div class="card"><h3 style="font-size:14px;margin-bottom:4px">'
+                                '<a href="/football/%s/">%s</a></h3>' % (slug, esc(lg_name.get(slug, slug))))
+                    body += [match_row(m) for m in lms]
+                    body.append("</div>")
+    if recent:
+        body.append("<h2>Recent Results</h2>")
+        for sport in sorted(by_sport(recent),
+                            key=lambda s: (0 if s == "football" else 1, s)):
+            ms = by_sport(recent)[sport]
+            body.append('<div class="sport-h">%s <span class="cnt">%d %s</span></div>'
+                        % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
+                           "match" if len(ms) == 1 else "matches"))
+            for d, by_league in _group_by_day(ms):
+                body.append('<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                            % esc(_day_label(d, today)))
+                for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
+                    lms = sorted(by_league[slug],
+                                 key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
+                                 reverse=True)
+                    body.append('<div class="card"><h3 style="font-size:14px;margin-bottom:4px">'
+                                '<a href="/football/%s/">%s</a></h3>' % (slug, esc(lg_name.get(slug, slug))))
+                    body += [match_row(m) for m in lms]
+                    body.append("</div>")
     body.append("<h2>Leagues</h2><div class='card'>")
     for lg in leagues:
         body.append('<p><a href="/football/%s/">%s</a> '
-                    '<span class="meta">— fixtures, results, standings</span></p>'
+                    '<span class="meta">\u2014 fixtures, results, standings</span></p>'
                     % (lg["slug"], esc(lg["name"])))
     body.append("</div>")
     return page("Live Football Scores, Fixtures & Results | ScoreBuzz",
-                "ScoreBuzz: live scores, today's fixtures, results, lineups, "
+                "ScoreBuzz: live scores, upcoming fixtures, results, lineups, "
                 "stats and standings across football, NFL, NBA, NHL, MLB, tennis and MMA.",
                 "/", [("Home", "/")], "\n".join(body))
 
@@ -1005,6 +1273,179 @@ def commentary_html(items):
     return "\n".join(out)
 
 
+def _event_minute(c):
+    """Minute number from a commentary item (clock seconds preferred)."""
+    sec = c.get("clock_sec")
+    if isinstance(sec, (int, float)) and sec >= 0:
+        return sec / 60.0
+    import re as _re
+    m = _re.search(r"(\d+)'(?:\+(\d+)')?", c.get("clock") or "")
+    if m:
+        return float(m.group(1)) + (float(m.group(2)) if m.group(2) else 0)
+    return None
+
+
+def _event_kind(c):
+    """Classify a key event for the timeline: goal | ycard | rcard | sub | None."""
+    t = (c.get("type") or "").lower()
+    txt = (c.get("text") or "").lower()
+    if c.get("scoring") or "goal" in t or ("goal" in txt and "disallowed" not in txt):
+        return "goal"
+    if "red card" in t or "red card" in txt or "sent off" in txt:
+        return "rcard"
+    if "yellow card" in t or "yellow card" in txt or "booked" in txt:
+        return "ycard"
+    if "substitut" in t or "substitut" in txt:
+        return "sub"
+    return None
+
+
+_TIMELINE_CSS = """
+.tl{position:relative;margin:14px 0 8px;padding:34px 8px 34px}
+.tl-axis{position:absolute;left:8px;right:8px;top:50%;height:2px;background:#d7dce3;transform:translateY(-50%)}
+.tl-m{position:absolute;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;
+display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;
+cursor:default;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.tl-m.goal{background:#1d9e57}.tl-m.ycard{background:#f2b705;border-radius:4px}
+.tl-m.rcard{background:#e5484d;border-radius:4px}.tl-m.sub{background:#2f7fe0}
+.tl-m.above{top:calc(50% - 30px)}.tl-m.below{top:calc(50% + 4px)}
+.tl-min{position:absolute;top:calc(50% - 8px);transform:translateX(-50%);font-size:10px;color:#8a93a3}
+.tl-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#5b6472;margin-top:4px}
+"""
+
+
+def timeline_html(items, home_id, away_id, home_short, away_short):
+    """SofaScore-style visual event timeline. Only real feed events, never invented."""
+    evs = []
+    for c in items or []:
+        kind = _event_kind(c)
+        minute = _event_minute(c)
+        if not kind or minute is None or minute < 0 or minute > 130:
+            continue
+        evs.append((minute, kind, c))
+    if not evs:
+        return ""
+    evs.sort(key=lambda e: e[0])
+    max_min = max(90.0, max(e[0] for e in evs))
+    icons = {"goal": "⚽", "ycard": "▮", "rcard": "▮", "sub": "⇄"}
+    labels = {"goal": "Goal", "ycard": "Yellow card", "rcard": "Red card", "sub": "Substitution"}
+    marks = []
+    for minute, kind, c in evs:
+        pct = min(100.0, minute / max_min * 100.0)
+        tid = c.get("team_id") or ""
+        side = "above" if tid == str(home_id) else ("below" if tid == str(away_id) else "above")
+        team = c.get("team_name") or (home_short if side == "above" else away_short)
+        tip = "%s\u2019 %s — %s" % (int(round(minute)), labels[kind], c.get("text") or "")
+        marks.append(
+            '<div class="tl-m %s %s" style="left:calc(8px + (100%% - 16px) * %.2f / 100)" title="%s">%s</div>'
+            % (kind, side, pct, esc(tip), icons[kind]))
+        marks.append(
+            '<div class="tl-min" style="left:calc(8px + (100%% - 16px) * %.2f / 100)">%d\u2032</div>'
+            % (pct, int(round(minute))))
+    legend = ('<div class="tl-legend"><span>⚽ Goal</span><span>▮ Yellow / red card</span>'
+              '<span>⇄ Substitution</span>'
+              '<span>%s \u25b2 &nbsp; %s \u25bc</span></div>'
+              % (esc(home_short or "Home"), esc(away_short or "Away")))
+    return ("<h2>Match Timeline</h2><div class='card'><style>%s</style>"
+            "<div class='tl'><div class='tl-axis'></div>%s</div>%s</div>"
+            % (_TIMELINE_CSS, "".join(marks), legend))
+
+
+_POS_GROUP = {
+    "GK": "gk",
+    "CB": "df", "LB": "df", "RB": "df", "LWB": "df", "RWB": "df",
+    "DF": "df", "SW": "df",
+    "CM": "mf", "CDM": "mf", "CAM": "mf", "LM": "mf", "RM": "mf",
+    "MF": "mf", "DM": "mf", "AM": "mf",
+    "ST": "fw", "CF": "fw", "LW": "fw", "RW": "fw", "FW": "fw",
+}
+
+_PITCH_CSS = """
+.ptch{position:relative;height:340px;background:#2a7d3f;border-radius:8px;overflow:hidden;
+background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.045) 0 34px,transparent 34px 68px)}
+.ptch:before{content:"";position:absolute;left:6px;right:6px;top:6px;bottom:6px;
+border:2px solid rgba(255,255,255,.7);border-radius:2px}
+.ptch:after{content:"";position:absolute;left:50%;top:6px;bottom:6px;width:2px;
+background:rgba(255,255,255,.7);transform:translateX(-50%)}
+.ptch .cc{position:absolute;left:50%;top:50%;width:70px;height:70px;margin:-35px 0 0 -35px;
+border:2px solid rgba(255,255,255,.7);border-radius:50%}
+.ptch .bx{position:absolute;left:50%;width:150px;height:52px;transform:translateX(-50%);
+border:2px solid rgba(255,255,255,.7)}
+.ptch .bx.top{top:6px;border-top:0}.ptch .bx.bot{bottom:6px;border-bottom:0}
+.pdot{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;
+background:#fff;color:#123;font-size:11px;font-weight:800;display:flex;align-items:center;
+justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:default;z-index:2}
+.pdot.aw{background:#123;color:#fff}
+.pdot .pn{position:absolute;top:36px;left:50%;transform:translateX(-50%);white-space:nowrap;
+font-size:9px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+"""
+
+
+def _pitch_coords(players, formation, flip):
+    """Map starters to (x%, y%) on a vertical pitch. y=0 top (away goal)."""
+    import re as _re
+    lines = [int(x) for x in _re.findall(r"\d+", formation or "")][:5]
+    starters = [pl for pl in players if pl.get("starter")]
+    gks = [pl for pl in starters if _POS_GROUP.get((pl.get("position") or "").upper()) == "gk"]
+    rest = [pl for pl in starters if pl not in gks]
+    order = {"df": 0, "mf": 1, "fw": 2}
+    rest.sort(key=lambda pl: order.get(_POS_GROUP.get((pl.get("position") or "").upper(), "mf"), 1))
+    if not lines or sum(lines) != len(rest):
+        # fallback: 4-4-2-ish split
+        n = len(rest)
+        lines = [n // 3, n // 3, n - 2 * (n // 3)] if n else []
+    groups = {"df": [], "mf": [], "fw": []}
+    for pl in rest:
+        groups[_POS_GROUP.get((pl.get("position") or "").upper(), "mf")].append(pl)
+    placed = []
+    li = 0
+    for grp_key in ("df", "mf", "fw"):
+        grp = groups[grp_key]
+        while grp:
+            size = lines[li] if li < len(lines) else len(grp)
+            chunk, grp = grp[:size], grp[size:]
+            placed.append((li, chunk))
+            li += 1
+    nlines = max(li, 1)
+    out = []
+    for pl in gks[:1]:
+        out.append((pl, 50.0, 96.0 if not flip else 4.0))
+    for li, chunk in placed:
+        y = 82.0 - (li / max(nlines - 1, 1)) * 64.0 if nlines > 1 else 50.0
+        if flip:
+            y = 100.0 - y
+        for i, pl in enumerate(chunk):
+            x = (i + 1) / (len(chunk) + 1) * 100.0
+            out.append((pl, x, y))
+    return out
+
+
+def formation_html(lineups, home_id, away_id):
+    """Pitch graphic with positioned starters. Football only; needs formation+positions."""
+    lus = [lu for lu in (lineups or [])
+           if lu.get("formation") and any(pl.get("starter") for pl in lu.get("players", []))]
+    if not lus:
+        return ""
+    parts = ["<style>%s</style>" % _PITCH_CSS, "<h2>Formations</h2>"]
+    for lu in lus[:2]:
+        flip = str(lu.get("team_id")) == str(away_id)
+        dots = []
+        for pl, x, y in _pitch_coords(lu["players"], lu["formation"], flip):
+            tip = "%s%s — %s" % (pl.get("jersey") + " " if pl.get("jersey") else "",
+                                 pl.get("name") or "", pl.get("position") or "")
+            dots.append('<div class="pdot%s" style="left:%.1f%%;top:%.1f%%" title="%s">%s'
+                        '<span class="pn">%s</span></div>'
+                        % (" aw" if flip else "", x, y, esc(tip),
+                           esc(str(pl.get("jersey") or "?")),
+                           esc((pl.get("name") or "").split()[-1][:12])))
+        parts.append("<div class='card'><h3 style='font-size:14px;margin-bottom:6px'>%s "
+                     "<span class='meta'>%s</span></h3>"
+                     "<div class='ptch'><div class='cc'></div>"
+                     "<div class='bx top'></div><div class='bx bot'></div>%s</div></div>"
+                     % (esc(lu["team_name"]), esc(lu["formation"]), "".join(dots)))
+    return "\n".join(parts)
+
+
 def lineups_html(lineups, teams_by_id):
     if not lineups:
         return ""
@@ -1048,10 +1489,41 @@ def form_html(last_five):
     return "\n".join(out)
 
 
-def h2h_html(h2h):
+def h2h_html(h2h, home_id=None, away_id=None,
+             home_short="", away_short=""):
     if not h2h:
         return ""
-    out = ["<h2>Head-to-Head</h2><div class='card'><table>"]
+    bars = ""
+    if home_id and away_id:
+        w = d = l = 0
+        for g in h2h:
+            try:
+                s0, s1 = int(g["s0"]), int(g["s1"])
+            except (TypeError, ValueError):
+                continue
+            if s0 == s1:
+                d += 1
+            elif (g["t0"] == str(home_id) and s0 > s1) or \
+                 (g["t1"] == str(home_id) and s1 > s0):
+                w += 1
+            else:
+                l += 1
+        tot = w + d + l
+        if tot:
+            pw, pd, pl = w / tot * 100, d / tot * 100, l / tot * 100
+            bars = ("<div class='h2hb'><span style='width:%.1f%%' class='hw' "
+                    "title='%s wins: %d'></span><span style='width:%.1f%%' class='hd' "
+                    "title='Draws: %d'></span><span style='width:%.1f%%' class='hl' "
+                    "title='%s wins: %d'></span></div>"
+                    "<div class='h2hl'><span>%s %d (%.0f%%)</span>"
+                    "<span>Draws %d (%.0f%%)</span><span>%s %d (%.0f%%)</span></div>"
+                    "<style>.h2hb{display:flex;height:10px;border-radius:5px;overflow:hidden;"
+                    "margin:6px 0 4px}.h2hb .hw{background:#1d9e57}.h2hb .hd{background:#9aa4b2}"
+                    ".h2hb .hl{background:#e5484d}.h2hl{display:flex;justify-content:space-between;"
+                    "font-size:11px;color:var(--mut);margin-bottom:8px}</style>"
+                    % (pw, esc(home_short), w, pd, d, pl, esc(away_short), l,
+                       esc(home_short), w, pw, d, pd, esc(away_short), l, pl))
+    out = ["<h2>Head-to-Head</h2><div class='card'>%s<table>" % bars]
     for g in h2h:
         out.append("<tr><td class='meta'>%s</td><td>%s</td></tr>"
                    % (esc(g["date"]), esc(g["line"])))
@@ -1286,11 +1758,21 @@ def build_match(m, summ):
         parts.append('<div class="card"><p class="meta">The live game view '
                      'will appear here shortly.</p></div>')
     if summ:
+        tl = timeline_html(summ.get("commentary"), m["home"]["id"], m["away"]["id"],
+                           m["home"].get("short") or m["home"]["name"],
+                           m["away"].get("short") or m["away"]["name"])
+        if tl:
+            parts.append(tl)
         parts.append(form_html(summ["last_five"]))
-        parts.append(h2h_html(summ["h2h"]))
+        parts.append(h2h_html(summ["h2h"], m["home"]["id"], m["away"]["id"],
+                                m["home"].get("short") or m["home"]["name"],
+                                m["away"].get("short") or m["away"]["name"]))
         parts.append(stat_bars(summ["stats"]))
         teams_by_id = {m["home"]["id"]: m["home"], m["away"]["id"]: m["away"]}
         parts.append(lineups_html(summ["lineups"], teams_by_id))
+        fh = formation_html(summ["lineups"], m["home"]["id"], m["away"]["id"])
+        if fh:
+            parts.append(fh)
         parts.append(leaders_html(summ["leaders"]))
         parts.append(commentary_html(summ["commentary"]))
     elif m["state"] == "pre":
@@ -1555,6 +2037,100 @@ def _cricket_bowling_table(players):
     return "\n".join(rows)
 
 
+def _ball_chip(b):
+    """Short visual label for one ball: 0 1 2 3 4 6 W wd nb. Defensive: data varies."""
+    if isinstance(b, dict):
+        keys = {str(k).lower(): v for k, v in b.items()}
+        txt = str(b.get("text") or b.get("commentary") or "").lower()
+        wicket = (keys.get("wicket") or keys.get("iswicket") or keys.get("dismissal")
+                  or keys.get("out") or ("wicket" in txt and "no" not in txt.split("wicket")[0][-12:]))
+        runs = keys.get("runs", keys.get("r", keys.get("score")))
+        try:
+            runs = int(str(runs).strip().split()[0])
+        except Exception:
+            runs = None
+        extra = (keys.get("wide") or keys.get("wideball") or keys.get("noball")
+                 or keys.get("no_ball") or keys.get("extra") or keys.get("extras")
+                 or "wide" in txt or "no ball" in txt)
+        if wicket:
+            return ("W", "wk")
+        if runs == 6:
+            return ("6", "six")
+        if runs == 4:
+            return ("4", "four")
+        if extra:
+            return ((str(runs) if isinstance(runs, int) else "") + "•", "ex")
+        if isinstance(runs, int):
+            return (str(runs), "r%d" % runs if runs <= 3 else "r")
+        return ("•", "")
+    s = str(b or "").strip()
+    if not s:
+        return ("•", "")
+    sl = s.lower()
+    if "wicket" in sl or " out " in (" " + sl + " "):
+        return ("W", "wk")
+    import re as _re
+    m = _re.search(r"(\d+)\s*runs?", sl)
+    if m:
+        r = int(m.group(1))
+        if r == 6:
+            return ("6", "six")
+        if r == 4:
+            return ("4", "four")
+        return (str(r), "")
+    if "wide" in sl or "no ball" in sl:
+        return ("•", "ex")
+    return ("•", "")
+
+
+def _ball_over(b, idx):
+    if isinstance(b, dict):
+        for k in ("over", "o", "overnumber", "over_number", "overno"):
+            v = b.get(k)
+            try:
+                return int(float(str(v).split(".")[0]))
+            except Exception:
+                pass
+    return idx // 6
+
+
+_OVERS_CSS = """
+.ovr{margin:8px 0}.ovr-h{font-size:12px;color:#5b6472;margin-bottom:4px;font-weight:600}
+.ovr-balls{display:flex;flex-wrap:wrap;gap:5px}
+.bl{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+font-size:12px;font-weight:700;background:#eef1f6;color:#333}
+.bl.six{background:#1d9e57;color:#fff}.bl.four{background:#2f7fe0;color:#fff}
+.bl.wk{background:#e5484d;color:#fff}.bl.ex{background:#f2b705;color:#333}
+"""
+
+
+def overs_html(balls):
+    """Over-by-over visual: each over as a row of ball chips."""
+    if not balls:
+        return ""
+    overs = {}
+    order = []
+    for i, b in enumerate(balls):
+        o = _ball_over(b, i)
+        if o not in overs:
+            overs[o] = []
+            order.append(o)
+        overs[o].append(b)
+    rows = ["<style>%s</style>" % _OVERS_CSS]
+    for o in sorted(order)[:40]:
+        chips = []
+        for b in overs[o][:12]:
+            label, cls = _ball_chip(b)
+            tip = ""
+            if isinstance(b, dict):
+                tip = esc(str(b.get("text") or b.get("commentary") or "")[:120])
+            chips.append('<span class="bl %s" title="%s">%s</span>'
+                         % (cls, tip, esc(label)))
+        rows.append('<div class="ovr"><div class="ovr-h">Over %s</div>'
+                    '<div class="ovr-balls">%s</div></div>' % (o + 1, "".join(chips)))
+    return "<h2>Over-by-Over</h2><div class='card'>%s</div>" % "".join(rows)
+
+
 def build_cricket_match(cm):
     path = cricket_url(cm)
     state = cm["state"]
@@ -1621,16 +2197,9 @@ def build_cricket_match(cm):
             parts.append("<h2>Fall of Wickets</h2><div class='card'><p class='meta'>%s</p></div>"
                          % esc("; ".join(inn["fow"])))
     balls = sc.get("balls") or []
-    if balls:
-        rows = []
-        for b in balls[:60]:
-            if isinstance(b, dict):
-                rows.append("<div class='cmt'><span>%s</span></div>"
-                            % esc(str(b.get("text") or b.get("commentary") or b)))
-            elif b:
-                rows.append("<div class='cmt'><span>%s</span></div>" % esc(str(b)))
-        if rows:
-            parts.append("<h2>Ball-by-Ball</h2><div class='card'>%s</div>" % "".join(rows))
+    ov = overs_html(balls)
+    if ov:
+        parts.append(ov)
     if state == "live" and not (sc.get("innings")):
         parts.append('<div class="card"><p class="meta">Live scorecard is loading — '
                      'refreshes automatically.</p></div>')
@@ -1667,6 +2236,20 @@ def build_sitemap(urls):
                    % (BASE_URL, u, today))
     out.append("</urlset>")
     return "\n".join(out)
+
+
+def build_sitemapindex(filenames):
+    today = today_utc().isoformat()
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for fn in filenames:
+        out.append("  <sitemap><loc>%s/%s</loc><lastmod>%s</lastmod></sitemap>"
+                   % (BASE_URL, fn, today))
+    out.append("</sitemapindex>")
+    return "\n".join(out)
+
+
+SITEMAP_MATCH_CHUNK = 40000  # max match URLs per sitemap-matches-N.xml
 
 
 def main():
@@ -1767,6 +2350,7 @@ def main():
     # 5) render — from the permanent archive, so ended matches keep their
     # URLs, stay in the sitemap and keep earning search traffic
     urls = []
+    match_urls = []  # match pages go to sitemap-matches-N.xml files
     today = today_utc()
 
     arch_summaries = {}
@@ -1794,10 +2378,30 @@ def main():
     todays = sorted([m for m in arch_all
                      if m["date"] and m["date"].date() == today and m["state"] != "post"],
                     key=lambda m: m["date"])
+    upcoming = sorted(
+        [m for m in arch_all
+         if m["state"] == "pre" and m["date"] and today <= m["date"].date() <= today + timedelta(days=7)],
+        key=lambda m: m["date"])
+    recent = sorted(
+        [m for m in arch_all
+         if m["state"] == "post" and m["date"] and today - timedelta(days=3) <= m["date"].date() <= today],
+        key=lambda m: m["date"], reverse=True)
     trend_html = trending_bar(live, todays)
-    urls.append(write_file("index.html", build_home(live, todays, leagues,
+    urls.append(write_file("index.html", build_home(live, upcoming, recent, leagues,
                                                     trend_html)))
-    urls.append(write_file("football/index.html", build_leagues_index(leagues)))
+    urls.append(write_file("leagues/index.html", build_leagues_index(leagues)))
+    stale_hub = os.path.join(OUT_DIR, "football", "index.html")
+    if os.path.exists(stale_hub):
+        os.remove(stale_hub)  # old leagues-hub location; sport pages now live at /<sport>/
+    # clean sport category pages: /football/, /american-football/, ...
+    for sport in SPORTS_NAV:
+        sslug = slugify(sport)
+        s_leagues = [lg for lg in leagues if lg["sport_label"] == sport]
+        s_events = [m for m in arch_all if m["league"]["sport_label"] == sport]
+        if not s_leagues and not s_events:
+            continue
+        urls.append(write_file("%s/index.html" % sslug,
+                               build_sport_page(sport, sslug, s_leagues, s_events)))
     urls.append(write_file("favourites/index.html", build_favourites()))
     urls.append(write_file("search/index.html", build_search_page()))
 
@@ -1832,11 +2436,14 @@ def main():
         h = "%s|v%d" % (rec["hash"], archive_mod.TEMPLATE_VERSION)
         rel = "football/%s/%s/index.html" % (lg_slug, match_slug(m))
         full = os.path.join(OUT_DIR, rel)
+        page_url = "/" + rel
         if rec.get("rendered_hash") == h and os.path.exists(full):
-            urls.append("/" + rel)  # unchanged — keep the sitemap entry
+            urls.append(page_url)  # unchanged — keep the sitemap entry
+            match_urls.append(page_url)
             n_skipped += 1
             continue
         urls.append(write_file(rel, build_match(m, arch_summaries.get(m["id"]))))
+        match_urls.append(page_url)
         rec["rendered_hash"] = h
         n_match += 1
 
@@ -1859,9 +2466,23 @@ def main():
                                build_cricket_series(s, sm)))
     for cm in cmatches:
         rel = "cricket/%s/%s/index.html" % (cm["series_slug"], cm["slug"])
+        page_url = "/" + rel
         urls.append(write_file(rel, build_cricket_match(cm)))
+        match_urls.append(page_url)
 
-    urls.append(write_file("sitemap.xml", build_sitemap(urls)))
+    # sitemap index: main file + chunked match files (40k URLs each)
+    match_url_set = set(match_urls)
+    main_urls = [u for u in urls if u not in match_url_set]
+    sitemap_files = []
+    write_file("sitemap-main.xml", build_sitemap(main_urls))
+    sitemap_files.append("sitemap-main.xml")
+    for i in range(0, len(match_urls), SITEMAP_MATCH_CHUNK):
+        fn = "sitemap-matches-%d.xml" % (i // SITEMAP_MATCH_CHUNK + 1)
+        write_file(fn, build_sitemap(match_urls[i:i + SITEMAP_MATCH_CHUNK]))
+        sitemap_files.append(fn)
+    write_file("sitemap.xml", build_sitemapindex(sitemap_files))
+    log("sitemap: %d main urls, %d match urls in %d match files"
+        % (len(main_urls), len(match_urls), len(sitemap_files) - 1))
     write_file("robots.txt",
                "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % BASE_URL)
 
