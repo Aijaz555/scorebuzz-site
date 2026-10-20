@@ -146,7 +146,11 @@ def parse_dt(s):
     if not s:
         return None
     try:
-        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            # CricAPI sometimes omits the offset — its times are GMT
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except Exception:
         return None
 
