@@ -726,7 +726,13 @@ def fetch_cricket():
                     ev = _espn_match_state(
                         _espn_series_events(espn_id),
                         m["team1"], m["team2"])
-                    if ev and ev.get("score_text"):
+                    if ev and ev.get("state") == "recent":
+                        p = ev
+                        probes[m["id"]] = p
+                        _cache_put("probes.json", probes)
+                        log("espn probe %s (%s): -> recent"
+                            % (m["id"], m["name"][:40]))
+                    elif ev and ev.get("score_text"):
                         p["score_text"] = ev["score_text"]
                         if ev.get("status"):
                             p["status"] = ev["status"]
