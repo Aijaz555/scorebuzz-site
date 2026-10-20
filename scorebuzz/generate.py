@@ -2571,6 +2571,14 @@ def build_cricket_match(cm):
                 % (cm["series_slug"], esc(cm["series_name"])))
     info_html = ("<div class='card'><p class='meta'>%s</p></div>"
                  % " &nbsp;·&nbsp; ".join(info))
+    squads = sc.get("squads") or {}
+    if squads:
+        sq = ["<h2>Squads</h2><div class='card'>"]
+        for team, names in squads.items():
+            sq.append("<p class='meta'><b>%s:</b> %s</p>"
+                      % (esc(team), esc(", ".join(names))))
+        sq.append("</div>")
+        info_html += "".join(sq)
 
     parts.append(_tabs_html([("sc", "Scorecard", "".join(sc_parts)),
                              ("balls", "Balls", "".join(ball_parts)),

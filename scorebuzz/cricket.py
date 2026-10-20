@@ -484,9 +484,8 @@ def _clean_team(n):
     return re.sub(r"[^a-z0-9 ]", "", n)
 
 
-def _espn_match_state(evs, t1, t2):
-    """Find the event for these two teams; return a probe-style verdict
-    {'state','status','score_text'} from ESPN's data, or None."""
+def _espn_find_event(evs, t1, t2):
+    """The ESPN event for these two teams, or None."""
     a, b = _clean_team(t1), _clean_team(t2)
     if not a or not b:
         return None
@@ -496,21 +495,113 @@ def _espn_match_state(evs, t1, t2):
                  for c in comps]
         if len(names) < 2:
             continue
-        if not ((a in names[0] or names[0] in a) and (b in names[1] or names[1] in b)) \
-                and not ((a in names[1] or names[1] in a) and (b in names[0] or names[0] in b)):
-            continue
-        st = ((e.get("status") or {}).get("type") or {}).get("state")
-        if st not in ("in", "post"):
-            return None
-        parts = []
-        for c in comps:
-            sc = str(c.get("score") or "")
-            if sc:
-                parts.append("%s %s" % ((c.get("team") or {}).get("displayName"), sc))
-        summ = (e.get("status") or {}).get("summary") or ""
-        return {"state": "live" if st == "in" else "recent",
-                "status": summ, "score_text": "   ".join(parts)}
+        if ((a in names[0] or names[0] in a) and (b in names[1] or names[1] in b)) \
+                or ((a in names[1] or names[1] in a) and (b in names[0] or names[0] in b)):
+            return e
     return None
+
+
+def _espn_match_state(evs, t1, t2):
+    """Probe-style verdict {'state','status','score_text'} from ESPN."""
+    e = _espn_find_event(evs, t1, t2)
+    if not e:
+        return None
+    st = ((e.get("status") or {}).get("type") or {}).get("state")
+    if st not in ("in", "post"):
+        return None
+    comps = ((e.get("competitions") or [{}])[0]).get("competitors") or []
+    parts = []
+    for c in comps:
+        sc = str(c.get("score") or "")
+        if sc:
+            parts.append("%s %s" % ((c.get("team") or {}).get("displayName"), sc))
+    summ = (e.get("status") or {}).get("summary") or ""
+    return {"state": "live" if st == "in" else "recent",
+            "status": summ, "score_text": "   ".join(parts)}
+
+
+def _espn_summary(series_id, event_id):
+    """ESPN match summary (squads, officials). Cached 10 minutes."""
+    name = "espn_sum_%s.json" % re.sub(r"[^0-9]", "", str(event_id))
+    cached = _cache_get(name, 10 * 60)
+    if cached is not None:
+        return cached
+    try:
+        import urllib.request
+        url = ("https://site.api.espn.com/apis/site/v2/sports/cricket/%s/"
+               "summary?event=%s" % (series_id, event_id))
+        req = urllib.request.Request(url, headers={"User-Agent": "ScoreBuzz/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception as ex:
+        log("espn summary fetch failed (%s): %s" % (event_id, ex))
+        return {}
+    _cache_put(name, data)
+    return data
+
+
+def _espn_scorecard(series_id, evs, t1, t2):
+    """Partial scorecard from ESPN data, in parse_scorecard's shape:
+    innings totals/overs from the scoreboard linescores (always
+    current), toss from the match summary line, squads + officials
+    from the summary endpoint. Batting/bowling cards are NOT in
+    ESPN's feed — those sections stay empty until CricAPI's own
+    scorecard arrives, and take over then."""
+    e = _espn_find_event(evs, t1, t2)
+    if not e:
+        return None
+    comps = ((e.get("competitions") or [{}])[0]).get("competitors") or []
+    by_period = {}
+    for c in comps:
+        tname = (c.get("team") or {}).get("displayName") or ""
+        for ls in c.get("linescores") or []:
+            if not isinstance(ls, dict):
+                continue
+            if (ls.get("runs") in (0, "0", None)
+                    and ls.get("wickets") in (0, "0", None)
+                    and not ls.get("isBatting")):
+                continue  # ESPN placeholder for a team yet to bat
+            per = ls.get("period") or 1
+            by_period.setdefault(per, []).append((tname, ls))
+    innings = []
+    for per in sorted(by_period):
+        for tname, ls in by_period[per]:
+            innings.append({
+                "name": "%s Inning %s" % (tname, per),
+                "total": ls.get("runs"), "wickets": ls.get("wickets"),
+                "overs": ls.get("overs"), "extras": "",
+                "batting": [], "bowling": [], "fow": [],
+            })
+    out = {"innings": innings, "toss": "", "umpires": "", "balls": [],
+           "squads": {}}
+    summ = (e.get("status") or {}).get("summary") or ""
+    if summ:
+        out["toss"] = summ
+    data = _espn_summary(series_id, e.get("id"))
+    if isinstance(data, dict):
+        offs = ((data.get("gameInfo") or {}).get("officials") or [])
+        names = []
+        for o in offs:
+            if isinstance(o, dict):
+                nm = o.get("displayName") or o.get("name") or ""
+                if nm:
+                    names.append(str(nm))
+            elif o:
+                names.append(str(o))
+        out["umpires"] = ", ".join(names)
+        for r in data.get("rosters") or []:
+            if not isinstance(r, dict):
+                continue
+            tname = (r.get("team") or {}).get("displayName") or ""
+            squad = []
+            for p in r.get("roster") or []:
+                ath = (p.get("athlete") or {}) if isinstance(p, dict) else {}
+                nm = ath.get("displayName") or ath.get("name") or ""
+                if nm:
+                    squad.append(str(nm) + (" (c)" if p.get("captain") else ""))
+            if tname and squad:
+                out["squads"][tname] = squad
+    return out
 
 
 def fetch_cricket():
@@ -748,6 +839,12 @@ def fetch_cricket():
                         raw_sc = get_scorecard(m["id"], live=True)
                         if raw_sc:
                             m["scorecard"] = parse_scorecard(raw_sc)
+                    if not m.get("scorecard") and espn_id:
+                        esc_card = _espn_scorecard(
+                            espn_id, _espn_series_events(espn_id),
+                            m["team1"], m["team2"])
+                        if esc_card and esc_card.get("innings"):
+                            m["scorecard"] = esc_card
             _cache_put("probes.json", probes)
             result["live_count"] = sum(1 for m in matches
                                        if m["state"] == "live")
