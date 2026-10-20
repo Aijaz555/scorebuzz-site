@@ -536,7 +536,10 @@ def fetch_cricket():
                            or _first(lv, "matchStarted"))
             ended = (is_ended(status) or bool(_first(e, "matchEnded"))
                      or bool(_first(lv, "matchEnded")) or ms == "result")
-            not_started = "not started" in status.lower() or ms == "fixture"
+            has_score = bool(_first(lv, "t1s") or _first(e, "t1s")
+                             or _first(lv, "score") or _first(e, "score"))
+            not_started = ("not started" in status.lower()
+                           or ms == "fixture") and not has_score
             if ended:
                 state = "recent"
             elif not_started:
@@ -596,6 +599,60 @@ def fetch_cricket():
             })
             if state == "live":
                 result["live_count"] += 1
+
+        # Probe pass: CricAPI's bulk lists can lag a match that has
+        # actually started (start time passed, still flagged fixture).
+        # Ask the per-match endpoint for the truth — capped, and cached
+        # for 20 minutes so a stale feed costs a few hits, not a flood.
+        try:
+            probes = _cache_get("probes.json", 20 * 60) or {}
+            fresh_probes = 0
+            for m in matches:
+                if m["state"] != "upcoming" or not m["date"]:
+                    continue
+                if not (now - timedelta(hours=12) <= m["date"] <= now):
+                    continue
+                p = probes.get(m["id"])
+                if p is None and fresh_probes < 5:
+                    data, _ = cricapi("/v1/cricScore", {"id": m["id"]})
+                    fresh_probes += 1
+                    obj = None
+                    if isinstance(data, dict):
+                        obj = data.get("data") or data
+                        if isinstance(obj, list):
+                            obj = obj[0] if obj else None
+                    p = {"state": "", "status": "", "score_text": ""}
+                    if isinstance(obj, dict):
+                        ms2 = str(_first(obj, "ms") or "").lower()
+                        st2 = str(_first(obj, "status") or "")
+                        sc2 = (_score_text(_first(obj, "score", "score"))
+                               or _flat_score(obj, obj))
+                        if (ms2 == "result" or is_ended(st2)
+                                or _first(obj, "matchEnded")):
+                            p = {"state": "recent", "status": st2,
+                                 "score_text": sc2}
+                        elif (ms2 == "live" or _first(obj, "matchStarted")
+                                or sc2):
+                            p = {"state": "live", "status": st2,
+                                 "score_text": sc2}
+                    probes[m["id"]] = p
+                    log("probe %s (%s): -> %s"
+                        % (m["id"], m["name"][:40], p["state"] or "no change"))
+                if p and p.get("state") in ("live", "recent"):
+                    m["state"] = p["state"]
+                    if p.get("status"):
+                        m["status"] = p["status"]
+                    if p.get("score_text"):
+                        m["score_text"] = p["score_text"]
+                    if p["state"] == "live" and not m.get("scorecard"):
+                        raw_sc = get_scorecard(m["id"], live=True)
+                        if raw_sc:
+                            m["scorecard"] = parse_scorecard(raw_sc)
+            _cache_put("probes.json", probes)
+            result["live_count"] = sum(1 for m in matches
+                                       if m["state"] == "live")
+        except Exception as e:
+            log("probe pass failed gracefully: %s" % e)
 
         # drop ancient/undated noise, keep recent window
         cutoff = now - timedelta(days=14)
