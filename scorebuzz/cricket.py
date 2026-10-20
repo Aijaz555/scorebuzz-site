@@ -37,7 +37,10 @@ SCORECARD_DIR = os.path.join(CACHE_DIR, "scorecards")
 HIT_CAP = 90
 MATCHES_TTL = 6 * 3600      # 4x/day max
 SERIES_TTL = 24 * 3600      # 1x/day
+LIVE_TTL = 30 * 60          # live snapshot: fresh enough to catch starts
 SCORECARD_LIVE_TTL = 45 * 60  # live scorecard refresh at most every 45 min
+RUN_SCORECARD_CAP = 25      # max scorecard API fetches in one build
+_run_sc_fetches = [0]
 CLI_TIMEOUT = 40
 
 ENDED_MARKERS = ["won by", "match ended", "no result", "abandoned",
@@ -235,8 +238,8 @@ def get_series():
 
 
 def get_live():
-    """Live snapshot, refreshed with matches (6h cache)."""
-    cached = _cache_get("live.json", MATCHES_TTL)
+    """Live snapshot (30-min cache — this is the live-games source)."""
+    cached = _cache_get("live.json", LIVE_TTL)
     if cached is not None:
         return cached
     data, _ = cricapi("/v1/cricScore")
@@ -268,6 +271,9 @@ def get_scorecard(mid, live):
             pass
     if not live and cached is not None:
         return cached
+    if _run_sc_fetches[0] >= RUN_SCORECARD_CAP:
+        return cached  # per-build seatbelt; the daily cap is the real one
+    _run_sc_fetches[0] += 1
     data, _ = cricapi("/v1/cricScore", {"id": mid})
     if data:
         json.dump(data, open(sp, "w"))
@@ -375,6 +381,14 @@ def parse_scorecard(data):
 # Normalization + orchestration
 # ----------------------------------------------------------------------------
 
+def _flat_score(lv, e):
+    """cricScore rows carry ready-made score strings (t1s/t2s) instead
+    of a structured score array."""
+    a = str(_first(lv, "t1s") or _first(e, "t1s") or "")
+    b = str(_first(lv, "t2s") or _first(e, "t2s") or "")
+    return "   ".join(x for x in (a, b) if x)
+
+
 def _score_text(sc):
     """Collapse CricAPI score array/object into 'PAK 150/3 (20 ov)' text."""
     if not sc:
@@ -452,13 +466,16 @@ def fetch_cricket():
                 if kid:
                     known_ids.add(kid)
         live_only = 0
+        _live_only_entries = []
         for e in live_raw:
             if isinstance(e, dict):
                 lid = str(e.get("id") or "")
                 if lid and lid not in known_ids:
-                    raw_matches.append(e)
+                    _live_only_entries.append(e)
                     known_ids.add(lid)
                     live_only += 1
+        if _live_only_entries:
+            raw_matches = _live_only_entries + raw_matches
         log("sources: %d fixture rows, %d live rows (%d live-only)"
             % (len(raw_matches) - live_only, len(live_raw), live_only))
 
@@ -494,13 +511,17 @@ def fetch_cricket():
             mid = str(_first(e, "unique_id", "id") or "")
             if not mid:
                 continue
-            t1 = str(_first(e, "team-1", "team1") or "")
-            t2 = str(_first(e, "team-2", "team2") or "")
+            t1 = str(_first(e, "team-1", "team1", "t1") or "")
+            t2 = str(_first(e, "team-2", "team2", "t2") or "")
             teams_arr = e.get("teams")
             if isinstance(teams_arr, list) and len(teams_arr) >= 2:
                 t1 = t1 or str(teams_arr[0] or "")
                 t2 = t2 or str(teams_arr[1] or "")
             lv = live_by_id.get(mid, {})
+            if not t1:
+                t1 = str(_first(lv, "t1") or "")
+            if not t2:
+                t2 = str(_first(lv, "t2") or "")
             status = str(_first(lv, "status") or _first(e, "status") or "")
             dt = parse_dt(_first(e, "dateTimeGMT", "date")
                           or _first(lv, "dateTimeGMT", "date"))
@@ -541,6 +562,11 @@ def fetch_cricket():
 
             # team logos from teamInfo when present
             imgs = {}
+            for _src in (lv, e):
+                if _first(_src, "t1img") and t1:
+                    imgs.setdefault(t1.lower(), _first(_src, "t1img"))
+                if _first(_src, "t2img") and t2:
+                    imgs.setdefault(t2.lower(), _first(_src, "t2img"))
             for ti in (_first(lv, "teamInfo", "teaminfo")
                        or _first(e, "teamInfo", "teaminfo") or []):
                 if isinstance(ti, dict) and ti.get("name"):
@@ -563,8 +589,9 @@ def fetch_cricket():
                 "status": status, "state": state,
                 "series_slug": sslug, "series_name": sname or "Cricket",
                 "slug": "%s-%s" % (mslug, mid),
-                "score_text": _score_text(_first(lv, "score", "score")
-                                          or _first(e, "score", "score")),
+                "score_text": (_score_text(_first(lv, "score", "score")
+                                           or _first(e, "score", "score"))
+                               or _flat_score(lv, e)),
                 "scorecard": scorecard, "team_imgs": imgs,
             })
             if state == "live":
