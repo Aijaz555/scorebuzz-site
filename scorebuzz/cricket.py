@@ -445,6 +445,74 @@ def _update_results_store(matches):
     return store
 
 
+ESPN_MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "espn_series_map.json")
+
+
+def _espn_map():
+    try:
+        m = json.load(open(ESPN_MAP_PATH))
+        return m if isinstance(m, dict) else {}
+    except Exception:
+        return {}
+
+
+def _espn_series_events(series_id):
+    """ESPN cricket scoreboard for one series (free, no hit budget).
+    Cached 10 minutes. Returns a list of events or []."""
+    name = "espn_%s.json" % re.sub(r"[^0-9]", "", str(series_id))
+    cached = _cache_get(name, 10 * 60)
+    if cached is not None:
+        return cached
+    try:
+        import urllib.request
+        url = ("https://site.api.espn.com/apis/site/v2/sports/cricket/%s/"
+               "scoreboard" % series_id)
+        req = urllib.request.Request(url, headers={"User-Agent": "ScoreBuzz/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+        evs = data.get("events") or []
+    except Exception as e:
+        log("espn fallback fetch failed (%s): %s" % (series_id, e))
+        return []
+    _cache_put(name, evs)
+    return evs
+
+
+def _clean_team(n):
+    n = re.sub(r"\s*\[[^\]]*\]", "", str(n or "")).strip().lower()
+    return re.sub(r"[^a-z0-9 ]", "", n)
+
+
+def _espn_match_state(evs, t1, t2):
+    """Find the event for these two teams; return a probe-style verdict
+    {'state','status','score_text'} from ESPN's data, or None."""
+    a, b = _clean_team(t1), _clean_team(t2)
+    if not a or not b:
+        return None
+    for e in evs or []:
+        comps = ((e.get("competitions") or [{}])[0]).get("competitors") or []
+        names = [_clean_team((c.get("team") or {}).get("displayName"))
+                 for c in comps]
+        if len(names) < 2:
+            continue
+        if not ((a in names[0] or names[0] in a) and (b in names[1] or names[1] in b)) \
+                and not ((a in names[1] or names[1] in a) and (b in names[0] or names[0] in b)):
+            continue
+        st = ((e.get("status") or {}).get("type") or {}).get("state")
+        if st not in ("in", "post"):
+            return None
+        parts = []
+        for c in comps:
+            sc = str(c.get("score") or "")
+            if sc:
+                parts.append("%s %s" % ((c.get("team") or {}).get("displayName"), sc))
+        summ = (e.get("status") or {}).get("summary") or ""
+        return {"state": "live" if st == "in" else "recent",
+                "status": summ, "score_text": "   ".join(parts)}
+    return None
+
+
 def fetch_cricket():
     """Main entry: returns normalized cricket data. Never raises."""
     result = {"matches": [], "series": [], "hits": 0, "errors": [],
@@ -638,6 +706,21 @@ def fetch_cricket():
                     probes[m["id"]] = p
                     log("probe %s (%s): -> %s"
                         % (m["id"], m["name"][:40], p["state"] or "no change"))
+                if not (p and p.get("state")):
+                    # CricAPI has been known to lag real play by hours.
+                    # For mapped series, ESPN's cricket API is the
+                    # tiebreaker — free and usually current.
+                    espn_id = _espn_map().get(m["series_slug"])
+                    if espn_id:
+                        ev = _espn_match_state(
+                            _espn_series_events(espn_id),
+                            m["team1"], m["team2"])
+                        if ev:
+                            p = ev
+                            probes[m["id"]] = p
+                            _cache_put("probes.json", probes)
+                            log("espn probe %s (%s): -> %s"
+                                % (m["id"], m["name"][:40], p["state"]))
                 if p and p.get("state") in ("live", "recent"):
                     m["state"] = p["state"]
                     if p.get("status"):
