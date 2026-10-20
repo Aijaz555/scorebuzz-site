@@ -1,12 +1,9 @@
 name: ScoreBuzz build and deploy
 
-
 on:
   schedule:
     - cron: "*/15 * * * *"
-
   workflow_dispatch:
-
 
 jobs:
   build:
@@ -14,12 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
 
       - name: Restore caches (cricket + match archive + dist)
         uses: actions/cache@v4
@@ -28,15 +23,20 @@ jobs:
             scorebuzz/cricket_cache
             scorebuzz/match_archive
             scorebuzz/dist
-          key: scorebuzz-cache-v1
-
+          # Rolling key: a static key is restored forever and NEVER
+          # re-saved on an exact hit, which froze every cache at its
+          # first snapshot (stale cricket data, re-bought scorecards,
+          # hit counter resetting each run). A per-run key + prefix
+          # restore keeps the latest state moving forward.
+          key: scorebuzz-cache-${{ github.run_id }}
+          restore-keys: |
+            scorebuzz-cache-
 
       - name: Build site
         env:
           CRICAPI_KEY: ${{ secrets.CRICAPI_KEY }}
         run: |
           cd scorebuzz && python3 generate.py
-
 
       - name: IndexNow key file
         env:
@@ -46,7 +46,6 @@ jobs:
             echo -n "$INDEXNOW_KEY" > "scorebuzz/dist/$INDEXNOW_KEY.txt"
           fi
 
-
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
@@ -54,9 +53,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy scorebuzz/dist --project-name=scorebuzz --commit-dirty=true
 
-
       - name: IndexNow ping (changed URLs)
-        continue-on-error: true
         env:
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
         run: |
