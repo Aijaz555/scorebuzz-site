@@ -790,6 +790,49 @@ if(typeof sbzFavRender==='function')sbzFavRender();
 document.addEventListener('DOMContentLoaded',paint);paint();
 })();
 </script>
+<script>
+(function(){
+var rows=[].slice.call(document.querySelectorAll('[data-eid]'));
+if(!rows.length)return;
+function pc(s){if(!s)return null;s=String(s);var a=s.match(/(\d+):(\d+)/);if(a)return parseInt(a[1],10)*60+parseInt(a[2],10);var b=s.match(/(\d+)\s*'/);if(b)return parseInt(b[1],10)*60;return null;}
+rows.forEach(function(r){r._clk=pc(r.getAttribute('data-clock'));r._at=Date.now();r._state=r.getAttribute('data-state');});
+setInterval(function(){var now=Date.now();rows.forEach(function(r){
+if(r._state!=='in'||r._clk==null||r.getAttribute('data-tick')!=='1')return;
+var adv=Math.floor((now-r._at)/1000);if(adv>75)adv=75;
+var mm=Math.floor((r._clk+adv)/60);var el=r.querySelector('.js-st');
+if(el)el.textContent='LIVE '+mm+String.fromCharCode(39);
+});},5000);
+function upd(r,e){
+var st=(e.status&&e.status.type)||{};var comp=(e.competitions||[])[0]||{};var cs=comp.competitors||[];
+var H=null,A=null;cs.forEach(function(c){if(c.homeAway==='home')H=c;if(c.homeAway==='away')A=c;});
+var he=r.querySelector('.js-hs'),ae=r.querySelector('.js-as');
+if(H&&he&&H.score!=null)he.textContent=H.score;
+if(A&&ae&&A.score!=null)ae.textContent=A.score;
+var big=r.querySelector('.js-big');
+if(big&&H&&A&&H.score!=null&&A.score!=null)big.textContent=H.score+' - '+A.score;
+var el=r.querySelector('.js-st');var det=st.detail||'';
+if(st.state==='post'){r._state='post';r.setAttribute('data-state','post');
+if(el){el.textContent=st.shortDetail||det||'FT';el.classList.remove('live');}}
+else if(st.state==='in'){r._state='in';
+if(/half/i.test(det)){r._clk=null;if(el)el.textContent='HT';}
+else{var c=pc(e.status.displayClock);if(c!=null){r._clk=c;r._at=Date.now();}
+if(el)el.textContent='LIVE '+(e.status.displayClock||st.shortDetail||'');}
+if(el)el.classList.add('live');}
+}
+function refresh(){
+var by={};var any=false;
+rows.forEach(function(r){if(r._state==='in'||r._state==='pre'){var k=r.getAttribute('data-espn');if(k){(by[k]=by[k]||[]).push(r);any=true;}}});
+if(!any)return;
+Object.keys(by).forEach(function(k){
+fetch('https://site.api.espn.com/apis/site/v2/sports/'+k+'/scoreboard').then(function(x){return x.json();}).then(function(d){
+var evs={};(d.events||[]).forEach(function(e){evs[String(e.id)]=e;});
+by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);});
+}).catch(function(){});
+});
+}
+setTimeout(refresh,6000);setInterval(refresh,60000);
+})();
+</script>
 </body>
 </html>""" % (esc(title), esc(desc), canon, esc(title), esc(desc), canon,
                ga_snippet(), CSS, ld, nav, sport_links, body_html,
@@ -820,10 +863,21 @@ def team_img(t, size=20):
     return ""
 
 
+def _live_attrs(m):
+    """data-* hooks for the client-side live updater (see LIVE_JS in page())."""
+    lg = m.get("league") or {}
+    return (' data-eid="%s" data-espn="%s/%s" data-state="%s" '
+            'data-clock="%s" data-tick="%s"'
+            % (esc(m.get("id") or ""), esc(lg.get("sport") or ""),
+               esc(lg.get("code") or ""), esc(m.get("state") or ""),
+               esc(m.get("clock") or ""),
+               "1" if lg.get("sport") == "soccer" else "0"))
+
+
 def match_row(m):
     live = m["state"] == "in"
-    st = '<span class="st%s">%s</span>' % (" live" if live else "",
-                                           esc(status_label(m)))
+    st = '<span class="st js-st%s">%s</span>' % (" live" if live else "",
+                                                 esc(status_label(m)))
     hs, aws = m["home"].get("score"), m["away"].get("score")
     def nm(t, s):
         cls = "w" if t.get("winner") and s is not None else ""
@@ -832,8 +886,8 @@ def match_row(m):
     if hs is None:
         sc = '<div class="sc">%s</div>' % esc(fmt_time(m["date"]))
     else:
-        sc = ('<div class="sc"><span class="%s">%s</span><br>'
-              '<span class="%s">%s</span></div>'
+        sc = ('<div class="sc"><span class="js-hs %s">%s</span><br>'
+              '<span class="js-as %s">%s</span></div>'
               % ("w" if m["home"].get("winner") else "", esc(hs),
                  "w" if m["away"].get("winner") else "", esc(aws)))
     fkey = "match:%s" % match_path(m)
@@ -842,11 +896,11 @@ def match_row(m):
     star = ('<button class="fav-star" data-fkey="%s" data-fname="%s" data-fdate="%s" '
             'aria-label="Save to favourites">&#9734;</button>'
             % (esc(fkey), esc(fname), esc(fdate)))
-    return ('<div class="mrow">%s<a href="%s" style="flex:1;display:flex;'
+    return ('<div class="mrow"%s>%s<a href="%s" style="flex:1;display:flex;'
             'align-items:center;gap:10px;min-width:0;color:inherit">'
             '%s<div class="teams">%s%s</div>%s</a>%s</div>'
-            % (st, match_path(m), "", nm(m["home"], hs), nm(m["away"], aws),
-               sc, star))
+            % (_live_attrs(m), st, match_path(m), "", nm(m["home"], hs),
+               nm(m["away"], aws), sc, star))
 
 
 def is_derby(m):
@@ -858,20 +912,21 @@ def is_derby(m):
 
 
 def trend_card(m, live):
-    def line(t, s):
-        return ('<span class="tline">%s<span class="tn2">%s</span><b>%s</b></span>'
+    def line(t, s, cls):
+        return ('<span class="tline">%s<span class="tn2">%s</span>'
+                '<b class="%s">%s</b></span>'
                 % (team_img(t, 18), esc(t["abbr"] or t["short"] or t["name"]),
-                   esc(s) if s is not None else ""))
+                   cls, esc(s) if s is not None else ""))
     if live:
-        stat = ('<span class="tstat live"><span class="pulse"></span>%s</span>'
+        stat = ('<span class="tstat live js-st"><span class="pulse"></span>%s</span>'
                 % esc(m["clock"] or m["status_text"] or "LIVE"))
     else:
         when = fmt_time(m["date"]) if m["date"] else "Scheduled"
-        stat = '<span class="tstat">%s</span>' % esc(when)
-    return ('<a class="tcard" href="%s">%s%s%s<span class="tleague">%s%s</span></a>'
-            % (match_path(m), stat,
-               line(m["home"], m["home"].get("score")),
-               line(m["away"], m["away"].get("score")),
+        stat = '<span class="tstat js-st">%s</span>' % esc(when)
+    return ('<a class="tcard" href="%s"%s>%s%s%s<span class="tleague">%s%s</span></a>'
+            % (match_path(m), _live_attrs(m), stat,
+               line(m["home"], m["home"].get("score"), "js-hs"),
+               line(m["away"], m["away"].get("score"), "js-as"),
                esc(m["league"]["name"]),
                " · Derby" if (not live and is_derby(m)) else ""))
 
@@ -1726,18 +1781,18 @@ def build_match(m, summ):
                 "live scores on ScoreBuzz."
                 % (m["home"]["name"], m["away"]["name"], lg["name"], when))
 
-    badge = ('<span class="badge live">● %s</span>'
+    badge = ('<span class="badge live js-st">● %s</span>'
              % esc(status_label(m))) if m["state"] == "in" else \
-            ('<span class="badge">%s</span>' % esc(status_label(m)))
+            ('<span class="badge js-st">%s</span>' % esc(status_label(m)))
     hero = (
-        "<div class='card scoreboard-hero'>%s"
+        "<div class='card scoreboard-hero'%s>%s"
         "<div><span class='nm'>%s %s</span><br>"
         "<span class='meta'>%s</span></div>"
-        "<div class='big'>%s %s %s</div>"
+        "<div class='big js-big'>%s %s %s</div>"
         "<div><span class='nm'>%s %s</span><br>"
         "<span class='meta'>%s</span></div>"
         "<p class='meta'>%s%s%s</p></div>"
-        % (badge,
+        % (_live_attrs(m), badge,
            team_img(m["home"], 52), esc(m["home"]["name"]),
            esc(m["home"].get("record") or ""),
            esc(hs if hs is not None else ""),
@@ -1955,7 +2010,9 @@ def build_cricket_index(matches, series):
     live = [m for m in matches if m["state"] == "live"]
     upcoming = [m for m in matches if m["state"] == "upcoming"][:30]
     recent = [m for m in matches if m["state"] == "recent"][:30]
-    body = ["<h1>Cricket Live Scores &amp; Fixtures</h1>"]
+    body = ["<h1>Cricket Live Scores &amp; Fixtures</h1>",
+            '<p class="meta"><a href="/cricket/schedule/">Full schedule '
+            '&amp; fixtures &rarr;</a></p>']
     if live:
         body.append('<div class="card"><span class="badge live">● LIVE NOW</span>')
         body += [cricket_match_row(m) for m in live]
@@ -1983,7 +2040,7 @@ def build_cricket_index(matches, series):
                 "\n".join(body))
 
 
-def build_cricket_series(s, matches):
+def build_cricket_series(s, matches, store=None):
     body = ["<h1>%s — Fixtures &amp; Results</h1>" % esc(s["name"])]
     live = [m for m in matches if m["state"] == "live"]
     other = [m for m in matches if m["state"] != "live"]
@@ -1991,6 +2048,11 @@ def build_cricket_series(s, matches):
         body.append('<div class="card"><span class="badge live">● LIVE</span>')
         body += [cricket_match_row(m) for m in live]
         body.append("</div>")
+    if store:
+        entries = [e for e in store.values() if e.get("series") == s["slug"]]
+        pt = _points_table_html(entries)
+        if pt:
+            body.append(pt)
     if other:
         body.append("<div class='card'>")
         body += [cricket_match_row(m) for m in other[:40]]
@@ -2140,6 +2202,272 @@ def overs_html(balls):
     return "<h2>Over-by-Over</h2><div class='card'>%s</div>" % "".join(rows)
 
 
+def _num(x):
+    try:
+        return float(x)
+    except Exception:
+        return None
+
+
+def _overs_to_balls(o):
+    """'15.3' overs -> 93 balls; '15' -> 90; None -> None."""
+    if o is None:
+        return None
+    s = str(o).strip()
+    if not s:
+        return None
+    try:
+        if "." in s:
+            whole, part = s.split(".", 1)
+            return int(whole) * 6 + int(part[:1])
+        return int(float(s)) * 6
+    except Exception:
+        return None
+
+
+def _alloc_balls(mtype):
+    """Total balls in a limited-overs innings, from the format name."""
+    t = (mtype or "").upper()
+    if "T10" in t:
+        return 60
+    if "T20" in t:
+        return 120
+    if "ODI" in t or "ONE DAY" in t or "LIST A" in t:
+        return 300
+    return None
+
+
+def _cricket_live_panel(cm):
+    """Cricbuzz-style live panel: CRR/RRR, pair at the crease, this over."""
+    sc = cm.get("scorecard") or {}
+    inns = sc.get("innings") or []
+    if not inns:
+        return ""
+    cur = inns[-1]
+    total = _num(cur.get("total"))
+    balls_bowled = _overs_to_balls(cur.get("overs"))
+    rows = []
+    if total is not None and balls_bowled:
+        rows.append("<b>CRR</b> %.2f" % (total / (balls_bowled / 6.0)))
+    alloc = _alloc_balls(cm.get("match_type"))
+    if len(inns) >= 2 and alloc and total is not None and balls_bowled is not None:
+        first_total = _num(inns[0].get("total"))
+        if first_total is not None:
+            need = first_total + 1 - total
+            left = alloc - balls_bowled
+            if need > 0 and left > 0:
+                rows.append("<b>RRR</b> %.2f" % (need / (left / 6.0)))
+                rows.append("<b>Target %d</b> — need %d off %d balls"
+                            % (int(first_total + 1), int(need), left))
+    pair = [p for p in (cur.get("batting") or [])
+            if (p.get("dismissal") or "").strip().lower()
+            in ("", "not out", "batting")]
+    pair_html = ""
+    if pair:
+        cells = []
+        for p in pair[-2:]:
+            nm = (p.get("name") or "").rstrip()
+            star = "*" if nm.endswith("*") else ""
+            nm = nm.rstrip("*").strip()
+            cells.append("%s%s %s (%s)" % (
+                esc(nm), star,
+                esc(p.get("r") if p.get("r") is not None else 0),
+                esc(p.get("b") if p.get("b") is not None else 0)))
+        pair_html = ("<p class='meta'><b>At the crease:</b> %s</p>"
+                     % " &nbsp;·&nbsp; ".join(cells))
+    over_html = ""
+    balls = sc.get("balls") or []
+    if balls:
+        groups, order = {}, []
+        for i, b in enumerate(balls):
+            o = _ball_over(b, i)
+            if o not in groups:
+                groups[o] = []
+                order.append(o)
+            groups[o].append(b)
+        if order:
+            o = max(order)
+            chips = []
+            for b in groups[o][:12]:
+                label, cls = _ball_chip(b)
+                chips.append('<span class="bl %s">%s</span>' % (cls, esc(label)))
+            over_html = ("<p class='meta'><b>This over:</b></p>"
+                         "<div class='ovr-balls'>%s</div>" % "".join(chips))
+    if not (rows or pair_html or over_html):
+        return ""
+    return ("<div class='card'><span class='badge live'>● LIVE</span>"
+            "<p class='meta'>%s</p>%s%s</div>"
+            % (" &nbsp;·&nbsp; ".join(rows), pair_html, over_html))
+
+
+def commentary_html(balls):
+    """Ball-by-ball text feed, newest first. Empty when feed has no text."""
+    items = []
+    for i, b in enumerate(balls or []):
+        if not isinstance(b, dict):
+            continue
+        txt = str(b.get("text") or b.get("commentary") or "").strip()
+        if txt:
+            items.append((_ball_over(b, i), txt))
+    if not items:
+        return ""
+    lis = "".join("<li><b>Over %s</b> — %s</li>" % (o + 1, esc(t))
+                  for o, t in reversed(items[-60:]))
+    return "<h2>Ball-by-Ball</h2><div class='card'><ul class='comm'>%s</ul></div>" % lis
+
+
+def _points_table_html(entries):
+    """League standings computed from tracked results (results store).
+    Win = 2 pts, tie/no-result/draw = 1. NRR shown only when every
+    counted match has complete innings data."""
+    if not entries:
+        return ""
+    tbl = {}
+
+    def T(n):
+        return tbl.setdefault(n, {"p": 0, "w": 0, "l": 0, "nr": 0, "pts": 0,
+                                    "rf": 0.0, "fb": 0, "ra": 0.0, "ab": 0,
+                                    "nm": 0})
+    for e in entries:
+        t1, t2 = (e.get("t1") or "").strip(), (e.get("t2") or "").strip()
+        if not t1 or not t2:
+            continue
+        a, b = T(t1), T(t2)
+        a["p"] += 1
+        b["p"] += 1
+        status = e.get("status") or ""
+        st = status.lower()
+        winner = None
+        if " won by" in st:
+            wname = status.split(" won by")[0].strip().lower()
+            if wname and wname in t1.lower():
+                winner = "a"
+            elif wname and wname in t2.lower():
+                winner = "b"
+        if winner == "a":
+            a["w"] += 1
+            a["pts"] += 2
+            b["l"] += 1
+        elif winner == "b":
+            b["w"] += 1
+            b["pts"] += 2
+            a["l"] += 1
+        else:
+            a["nr"] += 1
+            b["nr"] += 1
+            a["pts"] += 1
+            b["pts"] += 1
+        alloc = _alloc_balls(e.get("type"))
+        inns = e.get("innings") or []
+        if alloc and len(inns) >= 2:
+            per, ok = {}, True
+            for inn in inns[:2]:
+                nm = (inn.get("name") or "").lower()
+                tot = _num(inn.get("total"))
+                fb = _overs_to_balls(inn.get("overs"))
+                wk = _num(inn.get("wickets"))
+                if tot is None or fb is None:
+                    ok = False
+                    break
+                if wk is not None and wk >= 10:
+                    fb = alloc  # all out = full allocation for NRR
+                if t1.lower() in nm:
+                    per["a"] = (tot, fb)
+                elif t2.lower() in nm:
+                    per["b"] = (tot, fb)
+            if ok and "a" in per and "b" in per:
+                a["rf"] += per["a"][0]
+                a["fb"] += per["a"][1]
+                a["ra"] += per["b"][0]
+                a["ab"] += per["b"][1]
+                b["rf"] += per["b"][0]
+                b["fb"] += per["b"][1]
+                b["ra"] += per["a"][0]
+                b["ab"] += per["a"][1]
+                a["nm"] += 1
+                b["nm"] += 1
+    if not tbl:
+        return ""
+    show_nrr = all(v["p"] and v["nm"] == v["p"] for v in tbl.values())
+
+    def nrr(v):
+        if not v["fb"] or not v["ab"]:
+            return 0.0
+        return v["rf"] / (v["fb"] / 6.0) - v["ra"] / (v["ab"] / 6.0)
+
+    rows = sorted(tbl.items(),
+                  key=lambda kv: (-kv[1]["pts"],
+                                  -nrr(kv[1]) if show_nrr else 0.0, kv[0]))
+    out = ["<h2>Points Table</h2><div class='card'>"
+           "<div style='overflow-x:auto'><table><tr><th>#</th><th>Team</th>"
+           "<th class='num'>P</th><th class='num'>W</th><th class='num'>L</th>"
+           "<th class='num'>T/NR</th><th class='num'>Pts</th>"]
+    if show_nrr:
+        out.append("<th class='num'>NRR</th>")
+    out.append("</tr>")
+    for i, (name, v) in enumerate(rows, 1):
+        out.append("<tr><td>%d</td><td>%s</td><td class='num'>%d</td>"
+                   "<td class='num'>%d</td><td class='num'>%d</td>"
+                   "<td class='num'>%d</td><td class='num'><b>%d</b></td>%s</tr>"
+                   % (i, esc(name), v["p"], v["w"], v["l"], v["nr"], v["pts"],
+                      "<td class='num'>%+.3f</td>" % nrr(v) if show_nrr else ""))
+    out.append("</table></div><p class='meta'>Standings from results "
+               "tracked on ScoreBuzz.</p></div>")
+    return "".join(out)
+
+
+_TABS_STYLE = ("<style>.tabbar{display:flex;gap:6px;margin:14px 0 6px;flex-wrap:wrap}"
+               ".tabbtn{border:1px solid #d5dae3;background:#fff;border-radius:999px;"
+               "padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;color:#333}"
+               ".tabbtn.on{background:#1447c8;color:#fff;border-color:#1447c8}"
+               ".comm{margin:0;padding-left:18px}.comm li{margin:5px 0;font-size:14px}</style>")
+
+
+def _tabs_html(sections):
+    """(id, label, html) sections behind a tab bar. Without JS every
+    section stays visible, stacked — the tabs only enhance."""
+    btns, secs = [], []
+    for i, (tid, label, html) in enumerate(sections):
+        btns.append('<button class="tabbtn%s" data-tab="%s">%s</button>'
+                    % (" on" if i == 0 else "", tid, esc(label)))
+        secs.append('<div class="tabsec" id="tab-%s">%s</div>' % (tid, html))
+    js = ("<script>(function(){var bs=document.querySelectorAll('.tabbtn');"
+          "function act(b){bs.forEach(function(x){x.classList.toggle('on',x===b)});"
+          "document.querySelectorAll('.tabsec').forEach(function(s){"
+          "s.style.display=s.id==='tab-'+b.getAttribute('data-tab')?'':'none';});}"
+          "bs.forEach(function(b){b.addEventListener('click',function(){act(b)});});"
+          "if(bs.length)act(bs[0]);})();</script>")
+    return (_TABS_STYLE + '<div class="tabbar">' + "".join(btns) + "</div>"
+            + "".join(secs) + js)
+
+
+def build_cricket_schedule(matches):
+    up = [m for m in matches if m["state"] == "upcoming"]
+    up.sort(key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+    body = ["<h1>Cricket Schedule &amp; Fixtures</h1>"]
+    if not up:
+        body.append('<div class="card"><p class="meta">No upcoming fixtures '
+                    'right now — new fixtures appear here automatically.</p></div>')
+    cur = None
+    for m in up[:80]:
+        d = fmt_date(m["date"]) if m["date"] else "Date TBC"
+        if d != cur:
+            if cur is not None:
+                body.append("</div>")
+            body.append("<h2>%s</h2><div class='card'>" % esc(d))
+            cur = d
+        body.append(cricket_match_row(m))
+    if cur is not None:
+        body.append("</div>")
+    return page("Cricket Schedule & Fixtures | ScoreBuzz",
+                "Upcoming cricket fixtures across all series, with venues "
+                "and start times, on ScoreBuzz.",
+                "/cricket/schedule/",
+                [("Home", "/"), ("Cricket", "/cricket/"),
+                 ("Schedule", "/cricket/schedule/")],
+                "\n".join(body))
+
+
 def build_cricket_match(cm):
     path = cricket_url(cm)
     state = cm["state"]
@@ -2179,39 +2507,74 @@ def build_cricket_match(cm):
                esc(cm["series_name"])))
     parts = [hero]
     sc = cm.get("scorecard") or {}
-    if sc.get("toss") or sc.get("umpires") or cm.get("venue"):
-        info = []
-        if sc.get("toss"):
-            info.append("<b>Toss:</b> " + esc(sc["toss"]))
-        if cm.get("venue"):
-            info.append("<b>Venue:</b> " + esc(cm["venue"]))
-        if sc.get("umpires"):
-            info.append("<b>Umpires:</b> " + esc(sc["umpires"]))
-        parts.append("<div class='card'><p class='meta'>%s</p></div>"
-                     % " &nbsp;·&nbsp; ".join(info))
+    if state == "live":
+        panel = _cricket_live_panel(cm)
+        if panel:
+            parts.append(panel)
+
+    # --- Scorecard tab ---
+    sc_parts = []
     for inn in sc.get("innings") or []:
         head = inn.get("name") or "Innings"
         if inn.get("total") is not None:
             head += " — %s/%s" % (inn["total"], inn.get("wickets") if inn.get("wickets") is not None else 0)
             if inn.get("overs"):
                 head += " (%s ov)" % inn["overs"]
-        parts.append('<div class="inn-head">%s</div>' % esc(head))
+        sc_parts.append('<div class="inn-head">%s</div>' % esc(head))
         if inn.get("batting"):
-            parts.append("<h2>Batting</h2><div class='card'>%s</div>"
-                         % _cricket_batting_table(inn["batting"]))
+            sc_parts.append("<h2>Batting</h2><div class='card'>%s</div>"
+                            % _cricket_batting_table(inn["batting"]))
+            if inn.get("extras"):
+                sc_parts.append("<p class='meta'><b>Extras:</b> %s</p>"
+                                % esc(inn["extras"]))
         if inn.get("bowling"):
-            parts.append("<h2>Bowling</h2><div class='card'>%s</div>"
-                         % _cricket_bowling_table(inn["bowling"]))
+            sc_parts.append("<h2>Bowling</h2><div class='card'>%s</div>"
+                            % _cricket_bowling_table(inn["bowling"]))
         if inn.get("fow"):
-            parts.append("<h2>Fall of Wickets</h2><div class='card'><p class='meta'>%s</p></div>"
-                         % esc("; ".join(inn["fow"])))
+            sc_parts.append("<h2>Fall of Wickets</h2><div class='card'><p class='meta'>%s</p></div>"
+                            % esc("; ".join(inn["fow"])))
+    if not sc_parts:
+        if state == "live":
+            note = "Live scorecard is loading — refreshes automatically."
+        elif state == "upcoming":
+            note = "The scorecard will appear here once play begins."
+        else:
+            note = "Scorecard not available for this match."
+        sc_parts.append('<div class="card"><p class="meta">%s</p></div>' % note)
+
+    # --- Balls tab ---
     balls = sc.get("balls") or []
+    ball_parts = []
     ov = overs_html(balls)
     if ov:
-        parts.append(ov)
-    if state == "live" and not (sc.get("innings")):
-        parts.append('<div class="card"><p class="meta">Live scorecard is loading — '
-                     'refreshes automatically.</p></div>')
+        ball_parts.append(ov)
+    comm = commentary_html(balls)
+    if comm:
+        ball_parts.append(comm)
+    if not ball_parts:
+        ball_parts.append('<div class="card"><p class="meta">Ball-by-ball data '
+                          'is not available for this match.</p></div>')
+
+    # --- Info tab ---
+    info = []
+    if sc.get("toss"):
+        info.append("<b>Toss:</b> " + esc(sc["toss"]))
+    if cm.get("venue"):
+        info.append("<b>Venue:</b> " + esc(cm["venue"]))
+    if sc.get("umpires"):
+        info.append("<b>Umpires:</b> " + esc(sc["umpires"]))
+    if cm.get("date"):
+        info.append("<b>Date:</b> " + esc(cm["date"].strftime("%a %d %b %Y %H:%M UTC")))
+    if cm.get("match_type"):
+        info.append("<b>Format:</b> " + esc(cm["match_type"]))
+    info.append("<b>Series:</b> <a href='/cricket/%s/'>%s</a>"
+                % (cm["series_slug"], esc(cm["series_name"])))
+    info_html = ("<div class='card'><p class='meta'>%s</p></div>"
+                 % " &nbsp;·&nbsp; ".join(info))
+
+    parts.append(_tabs_html([("sc", "Scorecard", "".join(sc_parts)),
+                             ("balls", "Balls", "".join(ball_parts)),
+                             ("info", "Info", info_html)]))
 
     ev_jsonld = {
         "@context": "https://schema.org", "@type": "SportsEvent",
@@ -2258,6 +2621,68 @@ def build_sitemapindex(filenames):
     return "\n".join(out)
 
 
+def reap_zombies(arc, leagues_by_slug, now):
+    """Heal archive records stuck in state 'in' long after kickoff.
+
+    A record can miss its finishing scoreboard update (window edges,
+    feed gaps, suspended games). Verify each stale-live record once per
+    build against the summary endpoint, whose header carries the true
+    status, and flip it to its final state. Capped per build; records
+    that are genuinely still in play are left alone and re-checked on
+    the next build.
+    """
+    import archive as _arc_mod
+    checked = flipped = 0
+    for lg_slug, matches in arc.items():
+        lg = leagues_by_slug.get(lg_slug)
+        if not lg:
+            continue
+        for mid, rec in matches.items():
+            if checked >= 40:
+                return flipped
+            m = rec.get("m") or {}
+            if m.get("state") != "in":
+                continue
+            d = m.get("date")
+            if not isinstance(d, datetime) or now - d < timedelta(hours=5):
+                continue
+            url = ("https://site.api.espn.com/apis/site/v2/sports/%s/%s/"
+                   "summary?event=%s" % (lg["sport"], lg["code"], mid))
+            data = fetch_json(url)
+            checked += 1
+            if not data:
+                continue
+            comps = (data.get("header") or {}).get("competitions") or []
+            if not comps:
+                continue
+            comp = comps[0]
+            st = (comp.get("status") or {}).get("type") or {}
+            if st.get("state") != "post":
+                continue
+            m["state"] = "post"
+            m["status_text"] = (st.get("shortDetail") or st.get("detail")
+                                or "FT")
+            m["clock"] = ""
+            by_side = {}
+            for c in comp.get("competitors") or []:
+                if c.get("homeAway"):
+                    by_side[c["homeAway"]] = c
+            for side, key in (("home", "home"), ("away", "away")):
+                c = by_side.get(side)
+                tgt = m.get(key)
+                if c is not None and isinstance(tgt, dict):
+                    if c.get("score") is not None:
+                        tgt["score"] = c.get("score")
+                    tgt["winner"] = bool(c.get("winner"))
+            rec["m"] = m
+            rec["hash"] = _arc_mod.record_hash(m, rec.get("s"))
+            flipped += 1
+    if flipped:
+        log("zombie reaper: flipped %d stuck-live matches to FT (checked %d)"
+            % (flipped, checked))
+    return flipped
+
+
 SITEMAP_MATCH_CHUNK = 40000  # max match URLs per sitemap-matches-N.xml
 
 
@@ -2271,19 +2696,39 @@ def main():
     all_matches, league_events = [], {}
     teams = {}  # team_id -> {info..., "events": [matches]}
 
-    # 1) scoreboards
+    # 1) scoreboards — the default board PLUS the last two UTC days.
+    # ESPN's default board is "today" in US Eastern: a match that leaves
+    # that board while still 'in' never receives its final state and the
+    # archive keeps it LIVE forever. Re-fetching yesterday and the day
+    # before guarantees every started match is seen again after it ends.
+    # (The zombie reaper in step 2b is the final backstop.)
+    sb_now = datetime.now(timezone.utc)
+    sb_past_days = [(sb_now - timedelta(days=n)).strftime("%Y%m%d")
+                    for n in (1, 2)]
     for lg in leagues:
-        url = ("https://site.api.espn.com/apis/site/v2/sports/%s/%s/scoreboard"
-               % (lg["sport"], lg["code"]))
-        data = fetch_json(url)
+        base = ("https://site.api.espn.com/apis/site/v2/sports/%s/%s/scoreboard"
+                % (lg["sport"], lg["code"]))
+        raw_events = []
+        data = fetch_json(base)
         STATS["scoreboards"] += 1
-        if not data or not data.get("events"):
+        if data and data.get("events"):
+            raw_events.extend(data["events"])
+        for _day in sb_past_days:
+            ddata = fetch_json(base + "?dates=" + _day)
+            STATS["scoreboards"] += 1
+            if ddata and ddata.get("events"):
+                raw_events.extend(ddata["events"])
+        if not raw_events:
             STATS["failed"] += 1
             STATS["failed_leagues"].append(lg["slug"])
             log("FAIL scoreboard: %s" % lg["slug"])
             continue
         events = []
-        for ev in data["events"]:
+        _seen_ev = set()
+        for ev in raw_events:
+            if str(ev.get("id")) in _seen_ev:
+                continue
+            _seen_ev.add(str(ev.get("id")))
             m = parse_event(lg, ev)
             if not m:
                 continue
@@ -2326,6 +2771,8 @@ def main():
     arc = archive_mod.load(ARCHIVE_DIR)
     n_arc_before = sum(len(v) for v in arc.values())
     archive_mod.merge(arc, all_matches, summaries)
+    reap_zombies(arc, {lg["slug"]: lg for lg in leagues},
+                 datetime.now(timezone.utc))
     kept, dropped = archive_mod.prune(arc)
     log("archive: %d -> %d matches (%d dropped as older than %d days)"
         % (n_arc_before, kept, dropped, archive_mod.ARCHIVE_KEEP_DAYS))
@@ -2467,12 +2914,15 @@ def main():
     # 6) cricket pages (data already fetched in step 4)
     urls.append(write_file("cricket/index.html",
                            build_cricket_index(cmatches, cseries)))
+    urls.append(write_file("cricket/schedule/index.html",
+                           build_cricket_schedule(cmatches)))
+    cstore = cricket_data.get("results_store") or {}
     series_by_slug = {}
     for s in cseries:
         series_by_slug[s["slug"]] = s
         sm = [m for m in cmatches if m["series_slug"] == s["slug"]]
         urls.append(write_file("cricket/%s/index.html" % s["slug"],
-                               build_cricket_series(s, sm)))
+                               build_cricket_series(s, sm, cstore)))
     for cm in cmatches:
         rel = "cricket/%s/%s/index.html" % (cm["series_slug"], cm["slug"])
         page_url = "/" + rel

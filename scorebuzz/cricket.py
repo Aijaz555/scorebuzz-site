@@ -165,9 +165,11 @@ def get_matches():
     if cached is not None:
         return cached
     data, _ = cricapi("/v1/matches")
-    if data and isinstance(data.get("matches"), list):
-        _cache_put("matches.json", data["matches"])
-        return data["matches"]
+    if isinstance(data, dict):
+        lst = data.get("matches") or data.get("data")
+        if isinstance(lst, list):
+            _cache_put("matches.json", lst)
+            return lst
     # stale cache is better than nothing
     try:
         return json.load(open(os.path.join(CACHE_DIR, "matches.json")))
@@ -311,11 +313,15 @@ def parse_scorecard(data):
                     fow_lines.append(str(_first(f, "text", "description", "score") or ""))
                 elif f:
                     fow_lines.append(str(f))
+            ext = _first(inn, "extras", "extra")
+            if isinstance(ext, dict):
+                ext = ", ".join("%s %s" % (k, v) for k, v in ext.items())
             out["innings"].append({
                 "name": str(_first(inn, "inning", "title", "name", "team") or ""),
                 "total": _first(inn, "total", "score", "runs"),
                 "wickets": _first(inn, "wickets", "w"),
                 "overs": _first(inn, "overs", "o"),
+                "extras": str(ext or ""),
                 "batting": batting, "bowling": bowling,
                 "fow": [x for x in fow_lines if x],
             })
@@ -350,10 +356,46 @@ def _score_text(sc):
     return "   ".join(parts)
 
 
+def _update_results_store(matches):
+    """Persist every finished match ever seen (keyed by match id) so
+    series points tables can cover a whole tournament, not just the
+    14-day display window. Lives in CACHE_DIR, which the deploy
+    workflow caches between runs. Never raises."""
+    p = os.path.join(CACHE_DIR, "series_results.json")
+    try:
+        store = json.load(open(p))
+        if not isinstance(store, dict):
+            store = {}
+    except Exception:
+        store = {}
+    try:
+        for m in matches:
+            if m.get("state") != "recent":
+                continue
+            inns = []
+            for inn in (m.get("scorecard") or {}).get("innings") or []:
+                inns.append({"name": inn.get("name") or "",
+                             "total": inn.get("total"),
+                             "wickets": inn.get("wickets"),
+                             "overs": inn.get("overs")})
+            store[m["id"]] = {
+                "series": m["series_slug"], "t1": m["team1"],
+                "t2": m["team2"], "status": m["status"],
+                "type": m["match_type"],
+                "date": m["date"].isoformat() if m.get("date") else "",
+                "innings": inns,
+            }
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        json.dump(store, open(p, "w"))
+    except Exception as e:
+        log("results store update failed: %s" % e)
+    return store
+
+
 def fetch_cricket():
     """Main entry: returns normalized cricket data. Never raises."""
     result = {"matches": [], "series": [], "hits": 0, "errors": [],
-              "live_count": 0}
+              "live_count": 0, "results_store": {}}
     try:
         raw_matches = get_matches() or []
         live_raw = get_live() or []
@@ -364,6 +406,7 @@ def fetch_cricket():
 
         series_raw = get_series() or []
         series_by_match = {}
+        series_by_id = {}
         series_list = []
         for s in series_raw:
             if not isinstance(s, dict):
@@ -373,11 +416,16 @@ def fetch_cricket():
             if not sname:
                 continue
             sslug = slugify(sname)
+            if sid:
+                series_by_id[sid] = sslug
             series_list.append({"slug": sslug, "name": sname, "matches": []})
-            for sm in s.get("matches") or []:
-                mid = str(_first(sm, "id", "unique_id", "matchId") or "")
-                if mid:
-                    series_by_match[mid] = sslug
+            sm_list = s.get("matches")
+            if isinstance(sm_list, list):  # v1 returns a COUNT here, not a list
+                for sm in sm_list:
+                    if isinstance(sm, dict):
+                        mid = str(_first(sm, "id", "unique_id", "matchId") or "")
+                        if mid:
+                            series_by_match[mid] = sslug
         series_by_slug = {s["slug"]: s for s in series_list}
 
         now = datetime.now(timezone.utc)
@@ -390,26 +438,38 @@ def fetch_cricket():
                 continue
             t1 = str(_first(e, "team-1", "team1") or "")
             t2 = str(_first(e, "team-2", "team2") or "")
+            teams_arr = e.get("teams")
+            if isinstance(teams_arr, list) and len(teams_arr) >= 2:
+                t1 = t1 or str(teams_arr[0] or "")
+                t2 = t2 or str(teams_arr[1] or "")
             lv = live_by_id.get(mid, {})
             status = str(_first(lv, "status") or _first(e, "status") or "")
-            dt = parse_dt(_first(e, "dateTimeGMT", "date"))
-            mtype = str(_first(e, "type", "matchType") or "")
+            dt = parse_dt(_first(e, "dateTimeGMT", "date")
+                          or _first(lv, "dateTimeGMT", "date"))
+            mtype = str(_first(e, "matchType", "type")
+                        or _first(lv, "matchType", "type") or "")
             venue = str(_first(lv, "venue") or _first(e, "venue") or "")
-            name = str(_first(lv, "name") or "") or ("%s vs %s" % (t1, t2)).strip(" vs")
+            name = (str(_first(lv, "name") or _first(e, "name") or "")
+                    or ("%s vs %s" % (t1, t2)).strip(" vs"))
 
-            ended = is_ended(status)
-            if mid in live_by_id and not ended:
-                state = "live"
-            elif dt and dt > now:
-                state = "upcoming"
-            elif ended:
+            ms = str(_first(lv, "ms") or _first(e, "ms") or "").lower()
+            started = bool(_first(e, "matchStarted")
+                           or _first(lv, "matchStarted"))
+            ended = (is_ended(status) or bool(_first(e, "matchEnded"))
+                     or bool(_first(lv, "matchEnded")) or ms == "result")
+            not_started = "not started" in status.lower() or ms == "fixture"
+            if ended:
                 state = "recent"
-            elif _first(e, "matchStarted"):
-                state = "live" if not ended else "recent"
+            elif not_started:
+                state = "upcoming"
+            elif started or ms == "live" or mid in live_by_id:
+                state = "live"
             else:
-                state = "upcoming" if not ended else "recent"
+                state = "upcoming"
 
             sslug = (series_by_match.get(mid)
+                     or series_by_id.get(str(_first(e, "series_id",
+                                                    "seriesId") or ""))
                      or slugify(str(_first(e, "series", "seriesName", "tournament") or ""))
                      or slugify(mtype) or "cricket")
             sname = ""
@@ -423,7 +483,8 @@ def fetch_cricket():
 
             # team logos from teamInfo when present
             imgs = {}
-            for ti in _first(lv, "teamInfo", "teaminfo") or []:
+            for ti in (_first(lv, "teamInfo", "teaminfo")
+                       or _first(e, "teamInfo", "teaminfo") or []):
                 if isinstance(ti, dict) and ti.get("name"):
                     imgs[str(ti["name"]).lower()] = ti.get("img") or ""
 
@@ -444,7 +505,8 @@ def fetch_cricket():
                 "status": status, "state": state,
                 "series_slug": sslug, "series_name": sname or "Cricket",
                 "slug": "%s-%s" % (mslug, mid),
-                "score_text": _score_text(_first(lv, "score", "score")),
+                "score_text": _score_text(_first(lv, "score", "score")
+                                          or _first(e, "score", "score")),
                 "scorecard": scorecard, "team_imgs": imgs,
             })
             if state == "live":
@@ -459,6 +521,7 @@ def fetch_cricket():
         matches.sort(key=lambda m: ({"live": 0, "upcoming": 1, "recent": 2}[m["state"]],
                                      m["date"] or datetime.max.replace(tzinfo=timezone.utc)))
         result["matches"] = matches
+        result["results_store"] = _update_results_store(matches)
         result["series"] = [s for s in series_by_slug.values() if s["matches"]]
         result["hits"] = hits_used()
     except Exception as e:
