@@ -706,21 +706,32 @@ def fetch_cricket():
                     probes[m["id"]] = p
                     log("probe %s (%s): -> %s"
                         % (m["id"], m["name"][:40], p["state"] or "no change"))
-                if not (p and p.get("state")):
+                espn_id = _espn_map().get(m["series_slug"])
+                if espn_id and not (p and p.get("state")):
                     # CricAPI has been known to lag real play by hours.
                     # For mapped series, ESPN's cricket API is the
                     # tiebreaker — free and usually current.
-                    espn_id = _espn_map().get(m["series_slug"])
-                    if espn_id:
-                        ev = _espn_match_state(
-                            _espn_series_events(espn_id),
-                            m["team1"], m["team2"])
-                        if ev:
-                            p = ev
-                            probes[m["id"]] = p
-                            _cache_put("probes.json", probes)
-                            log("espn probe %s (%s): -> %s"
-                                % (m["id"], m["name"][:40], p["state"]))
+                    ev = _espn_match_state(
+                        _espn_series_events(espn_id),
+                        m["team1"], m["team2"])
+                    if ev:
+                        p = ev
+                        probes[m["id"]] = p
+                        _cache_put("probes.json", probes)
+                        log("espn probe %s (%s): -> %s"
+                            % (m["id"], m["name"][:40], p["state"]))
+                elif espn_id and p and p.get("state") == "live":
+                    # Already promoted: keep the score current from ESPN
+                    # (its events cache refreshes every 10 minutes).
+                    ev = _espn_match_state(
+                        _espn_series_events(espn_id),
+                        m["team1"], m["team2"])
+                    if ev and ev.get("score_text"):
+                        p["score_text"] = ev["score_text"]
+                        if ev.get("status"):
+                            p["status"] = ev["status"]
+                        probes[m["id"]] = p
+                        _cache_put("probes.json", probes)
                 if p and p.get("state") in ("live", "recent"):
                     m["state"] = p["state"]
                     if p.get("status"):
