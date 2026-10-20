@@ -172,6 +172,41 @@ def get_matches():
     if isinstance(data, dict):
         lst = data.get("matches") or data.get("data")
         if isinstance(lst, list):
+            # The endpoint pages its catalogue (info.totalRows): the
+            # first page alone can be one tournament's fixtures while
+            # today's matches sit on a later page. Follow a few pages.
+            info = data.get("info") or {}
+            try:
+                total = int(info.get("totalRows") or info.get("total")
+                            or len(lst))
+            except Exception:
+                total = len(lst)
+            seen = set()
+            for e in lst:
+                if isinstance(e, dict):
+                    seen.add(str(_first(e, "unique_id", "id") or ""))
+            pages = 0
+            while len(lst) < total and pages < 2 and hits_used() < HIT_CAP:
+                more, _ = cricapi("/v1/matches", {"offset": len(lst)})
+                ml = None
+                if isinstance(more, dict):
+                    ml = more.get("matches") or more.get("data")
+                if not isinstance(ml, list) or not ml:
+                    break
+                added = 0
+                for e in ml:
+                    if isinstance(e, dict):
+                        k = str(_first(e, "unique_id", "id") or "")
+                        if k and k not in seen:
+                            seen.add(k)
+                            lst.append(e)
+                            added += 1
+                pages += 1
+                if not added:
+                    break  # endpoint ignored offset — avoid duplicates
+            if pages:
+                log("matches paginated: %d rows of %d reported"
+                    % (len(lst), total))
             _cache_put("matches.json", lst)
             return lst
     # stale cache is better than nothing
@@ -407,6 +442,25 @@ def fetch_cricket():
         for e in live_raw:
             if isinstance(e, dict) and e.get("id"):
                 live_by_id[str(e["id"])] = e
+        # A match that is live right now may not appear in the fixtures
+        # list at all (different series, later page). Build records from
+        # the live snapshot itself so a running game can never be missed.
+        known_ids = set()
+        for e in raw_matches:
+            if isinstance(e, dict):
+                kid = str(_first(e, "unique_id", "id") or "")
+                if kid:
+                    known_ids.add(kid)
+        live_only = 0
+        for e in live_raw:
+            if isinstance(e, dict):
+                lid = str(e.get("id") or "")
+                if lid and lid not in known_ids:
+                    raw_matches.append(e)
+                    known_ids.add(lid)
+                    live_only += 1
+        log("sources: %d fixture rows, %d live rows (%d live-only)"
+            % (len(raw_matches) - live_only, len(live_raw), live_only))
 
         series_raw = get_series() or []
         series_by_match = {}
