@@ -628,7 +628,7 @@ border-bottom:2px solid var(--line);padding-bottom:6px}
 .mrow:last-child{border-bottom:0}
 .mrow .st{font-size:12px;color:var(--mut);width:86px;flex-shrink:0;font-weight:600}
 .mrow .st.live{color:var(--red);font-weight:800}
-.teams{flex:1;min-width:0}.tn{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teams{flex:1;min-width:0}.tn{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mcomp{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 .tn img{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
 .sc{font-weight:700;font-size:15px;text-align:right;white-space:nowrap}
 .sc .w{color:var(--grn)}
@@ -1013,7 +1013,7 @@ def _live_attrs(m):
                "1" if lg.get("sport") == "soccer" else "0"))
 
 
-def match_row(m):
+def match_row(m, comp=None):
     live = m["state"] == "in"
     st = '<span class="st js-st%s">%s</span>' % (" live" if live else "",
                                                  esc(status_label(m)))
@@ -1035,11 +1035,12 @@ def match_row(m):
     star = ('<button class="fav-star" data-fkey="%s" data-fname="%s" data-fdate="%s" '
             'aria-label="Save to favourites">&#9734;</button>'
             % (esc(fkey), esc(fname), esc(fdate)))
+    comp_html = '<div class="mcomp">%s</div>' % esc(comp) if comp else ""
     return ('<div class="mrow"%s>%s<a href="%s" style="flex:1;display:flex;'
             'align-items:center;gap:10px;min-width:0;color:inherit">'
-            '%s<div class="teams">%s%s</div>%s</a>%s</div>'
+            '%s<div class="teams">%s%s%s</div>%s</a>%s</div>'
             % (_live_attrs(m), st, match_path(m), "", nm(m["home"], hs),
-               nm(m["away"], aws), sc, star))
+               nm(m["away"], aws), comp_html, sc, star))
 
 
 def is_derby(m):
@@ -1252,17 +1253,18 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
         body.append("</div></div>")
     if upcoming:
         body.append('<section class="fsec"><h2>Upcoming Fixtures</h2>')
+        lgmap = {l["slug"]: l["name"] for l in sport_leagues}
         for d, by_league in _group_by_day(upcoming):
+            day_ms = sorted(
+                (mm for ms in by_league.values() for mm in ms),
+                key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
             body.append('<div class="dayblock" data-day="%s">'
                         '<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
                         % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
-            for slug in sorted(by_league):
-                ms = sorted(by_league[slug],
-                            key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
-                lg = next((l for l in sport_leagues if l["slug"] == slug), None)
-                body.append(_lgroup(slug, lg["name"] if lg else slug,
-                                    "".join(match_row(m) for m in ms),
-                                    "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
+            body.append('<div class="card">')
+            body += [match_row(m, lgmap.get(m["league"]["slug"], ""))
+                     for m in day_ms]
+            body.append("</div>")
             body.append("</div>")
         body.append("</section>")
     if recent:
@@ -1400,23 +1402,20 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
 
     if upcoming:
         body.append('<section class="fsec"><h2>Upcoming Fixtures</h2>')
-        for sport in sorted(by_sport(upcoming),
-                            key=lambda s: (0 if s == "football" else 1, s)):
-            ms = by_sport(upcoming)[sport]
-            body.append('<div class="sportblock"><div class="sport-h">%s <span class="cnt">%d %s</span></div>'
-                        % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
-                           "match" if len(ms) == 1 else "matches"))
-            for d, by_league in _group_by_day(ms):
-                body.append('<div class="dayblock" data-day="%s">'
-                            '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
-                            % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
-                for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
-                    lms = sorted(by_league[slug],
-                                 key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
-                    body.append(_lgroup(slug, lg_name.get(slug, slug),
-                                        "".join(match_row(m) for m in lms),
-                                        "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
-                body.append("</div>")
+        up_sorted = sorted(
+            upcoming,
+            key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+        for d, by_league in _group_by_day(up_sorted):
+            day_ms = sorted(
+                (mm for ms in by_league.values() for mm in ms),
+                key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+            body.append('<div class="dayblock" data-day="%s">'
+                        '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                        % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
+            body.append('<div class="card">')
+            body += [match_row(m, lg_name.get(m["league"]["slug"], ""))
+                     for m in day_ms]
+            body.append("</div>")
             body.append("</div>")
         body.append("</section>")
     if recent:
@@ -1455,7 +1454,8 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
 
 
 def build_league(league, events, standings, trend_html=""):
-    upcoming = [m for m in events if m["state"] == "pre"]
+    upcoming = sorted([m for m in events if m["state"] == "pre"],
+                      key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
     live = [m for m in events if m["state"] == "in"]
     finished = [m for m in events if m["state"] == "post"]
     body = [trend_html,
