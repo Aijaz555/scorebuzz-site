@@ -582,26 +582,29 @@ def parse_standings(data):
 # ----------------------------------------------------------------------------
 
 CSS = """
-:root{--bg:#0d1117;--card:#161b22;--line:#262d36;--txt:#e6edf3;--mut:#8b949e;
---acc:#2f81f7;--grn:#3fb950;--red:#f85149;--amber:#d29922}
+:root{--bg:#edf0f4;--card:#ffffff;--line:#dde3ea;--txt:#15222f;--mut:#5d6f82;
+--acc:#1447c8;--grn:#178a4c;--red:#d92d20;--amber:#b8860b;--bg2:#eef2f7}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;font-size:16px}
 a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
-.wrap{max-width:1000px;margin:0 auto;padding:0 14px}
-header.top{background:#010409;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-.top-in{display:flex;align-items:center;gap:18px;padding:12px 14px;max-width:1000px;margin:0 auto}
-.brand{font-size:22px;font-weight:800;color:#fff;letter-spacing:.5px}
-.brand b{color:var(--amber)}
-nav.main{display:flex;gap:4px;overflow-x:auto;padding:0 14px 10px;max-width:1000px;margin:0 auto}
-nav.main a{color:var(--mut);font-size:13px;padding:6px 10px;border-radius:6px;white-space:nowrap}
-nav.main a:hover{background:var(--card);color:var(--txt);text-decoration:none}
-h1{font-size:24px;margin:22px 0 12px}h2{font-size:19px;margin:24px 0 10px;
-border-bottom:1px solid var(--line);padding-bottom:6px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
-.mrow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 14px}
+.wrap-wide{max-width:1360px}
+header.top{background:#0e2a1d;background:linear-gradient(90deg,#0b3524,#0e5136);border-bottom:3px solid var(--grn);position:sticky;top:0;z-index:10}
+.top-in{display:flex;align-items:center;gap:18px;padding:12px 14px;max-width:1360px;margin:0 auto}
+.brand{font-size:24px;font-weight:800;color:#fff;letter-spacing:.5px}
+.brand b{color:#7ee2a8}
+.brand:hover{text-decoration:none}
+nav.main{display:flex;gap:6px;overflow-x:auto;padding:0 14px 12px;max-width:1360px;margin:0 auto}
+nav.main a{color:#d7e3dc;font-size:13px;font-weight:600;padding:6px 13px;border-radius:999px;white-space:nowrap;background:rgba(255,255,255,.09)}
+nav.main a:hover{background:rgba(255,255,255,.22);color:#fff;text-decoration:none}
+h1{font-size:25px;margin:20px 0 12px}h2{font-size:19px;margin:24px 0 10px;
+border-bottom:2px solid var(--line);padding-bottom:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px rgba(21,34,47,.05)}
+.mrow{display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid var(--line);border-radius:6px}
+.mrow:hover{background:#f4f8fd}
 .mrow:last-child{border-bottom:0}
-.mrow .st{font-size:12px;color:var(--mut);width:86px;flex-shrink:0}
-.mrow .st.live{color:var(--red);font-weight:700}
+.mrow .st{font-size:12px;color:var(--mut);width:86px;flex-shrink:0;font-weight:600}
+.mrow .st.live{color:var(--red);font-weight:800}
 .teams{flex:1;min-width:0}.tn{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tn img{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
 .sc{font-weight:700;font-size:15px;text-align:right;white-space:nowrap}
@@ -612,7 +615,7 @@ th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
 td.num,th.num{text-align:right}.pos{color:var(--mut);width:34px}
 .bar-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px}
 .bar-row .v{width:44px;text-align:center;font-weight:700}
-.bar{flex:1;height:8px;background:#21262d;border-radius:4px;position:relative;overflow:hidden}
+.bar{flex:1;height:8px;background:#e3e9f0;border-radius:4px;position:relative;overflow:hidden}
 .bar i{position:absolute;top:0;bottom:0;background:var(--acc);border-radius:4px}
 .bar-row .lab{width:100%;text-align:center;color:var(--mut);font-size:12px;margin-top:2px}
 .stat-block{margin:4px 0 10px}
@@ -627,12 +630,12 @@ td.num,th.num{text-align:right}.pos{color:var(--mut);width:34px}
 .pl .js{color:var(--mut);width:30px}.pl.starter .nm{font-weight:600}
 .formchip{display:inline-block;min-width:24px;text-align:center;font-size:12px;font-weight:700;
 border-radius:4px;padding:2px 4px;margin-right:4px;color:#fff}
-.fW{background:var(--grn)}.fD{background:var(--mut)}.fL{background:var(--red)}
+.fW{background:var(--grn)}.fD{background:#8494a7}.fL{background:var(--red)}
 .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;
-background:#1f2a37;color:var(--acc);margin-bottom:8px}
-.badge.live{background:#3d1113;color:var(--red)}
+background:#e8effc;color:var(--acc);margin-bottom:8px}
+.badge.live{background:#fdeceb;color:var(--red)}
 .meta{color:var(--mut);font-size:13px;margin:6px 0}
-footer{border-top:1px solid var(--line);margin-top:36px;padding:20px 14px;color:var(--mut);font-size:13px}
+footer{border-top:1px solid var(--line);margin-top:36px;padding:20px 14px;color:var(--mut);font-size:13px;background:#fff}
 footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .kv{display:flex;gap:8px;font-size:14px;padding:5px 0;border-bottom:1px solid var(--line)}
 .kv b{min-width:130px;color:var(--mut);font-weight:600}
@@ -652,22 +655,22 @@ align-items:center;gap:6px;margin-bottom:6px}
 .tstat.live{color:var(--red)}
 .pulse{width:8px;height:8px;border-radius:50%;background:var(--red);
 animation:pl 1.6s infinite}
-@keyframes pl{0%{box-shadow:0 0 0 0 rgba(248,81,73,.6)}
-70%{box-shadow:0 0 0 8px rgba(248,81,73,0)}100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(217,45,32,.5)}
+70%{box-shadow:0 0 0 8px rgba(217,45,32,0)}100%{box-shadow:0 0 0 0 rgba(217,45,32,0)}}
 .tline{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0}
 .tline img{width:18px;height:18px}
 .tline .tn2{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tline b{font-size:14px}
 .tleague{font-size:10px;color:var(--mut);margin-top:6px;display:block;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fav-star{background:none;border:0;color:var(--mut);font-size:19px;cursor:pointer;
+.fav-star{background:none;border:0;color:#a7b4c2;font-size:19px;cursor:pointer;
 padding:2px 8px;line-height:1;flex-shrink:0}
 .fav-star:hover{color:var(--amber)}
 .fav-star.on{color:var(--amber)}
 h1 .fav-star{font-size:22px;vertical-align:middle}
 .sbox{margin-left:auto}
-.sbox input{background:var(--card);border:1px solid var(--line);color:var(--txt);
-border-radius:8px;padding:7px 12px;font-size:14px;width:190px}
+.sbox input{background:#fff;border:1px solid rgba(255,255,255,.4);color:var(--txt);
+border-radius:999px;padding:8px 14px;font-size:14px;width:210px}
 .sbox input::placeholder{color:var(--mut)}
 .sres{margin:6px 0}
 .sres a{display:block;padding:9px 4px;border-bottom:1px solid var(--line);font-size:15px}
@@ -698,8 +701,38 @@ border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
 font-size:16px;font-weight:700;margin-bottom:6px}
 .sbz-chead .ck{color:var(--mut);font-weight:600;font-size:13px}
 .cmark{display:inline-block;font-size:10px;font-weight:700;border:1px solid var(--line);
-border-radius:4px;padding:0 5px;margin-left:5px;color:var(--amber);background:var(--bg)}
+border-radius:4px;padding:0 5px;margin-left:5px;color:var(--amber);background:#fff8ea}
 .inn-head{font-size:16px;font-weight:700;margin:14px 0 6px}
+/* ---- three-column layout (list pages) ---- */
+.layout{display:grid;grid-template-columns:238px minmax(0,1fr) 294px;gap:16px;align-items:start;padding-top:4px}
+.content{min-width:0}
+.side,.rail{position:sticky;top:116px}
+.sidebox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 14px;box-shadow:0 1px 2px rgba(21,34,47,.05)}
+.sidebox h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin:2px 4px 8px}
+.sidebox h4{font-size:12px;color:var(--mut);margin:10px 4px 4px;font-weight:700}
+.sidebox a{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;color:var(--txt);font-size:14px}
+.sidebox a:hover{background:#eef4ff;text-decoration:none}
+.sidebox a .cnt{color:var(--mut);font-size:12px}
+.sidebox.scroll{max-height:560px;overflow-y:auto}
+.mini{display:flex;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line);font-size:13px;color:inherit}
+.mini:last-child{border-bottom:0}
+.mini:hover{text-decoration:none;background:#f4f8fd}
+.mini .mt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .ms{font-weight:700;white-space:nowrap}
+.mini .ml{color:var(--red);font-weight:800;font-size:11px;white-space:nowrap}
+.mini .ml.mut{color:var(--mut)}
+@media(max-width:1100px){.rail{display:none}.layout{grid-template-columns:224px minmax(0,1fr)}}
+@media(max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}.side{position:static}.side .sidebox.scroll{display:none}}
+/* ---- league group blocks + date strip ---- */
+.lgroup{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:12px 0;overflow:hidden;box-shadow:0 1px 2px rgba(21,34,47,.05)}
+.lg-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#eef4ec;border-bottom:1px solid var(--line);font-weight:700;font-size:15px}
+.lg-head a{color:var(--txt)}
+.lg-head .lg-cnt{margin-left:auto;font-size:12px;color:var(--mut);font-weight:600}
+.lgroup .mrow{padding-left:14px;padding-right:10px}
+.datestrip{display:flex;gap:8px;margin:12px 0 2px;flex-wrap:wrap}
+.datestrip a{padding:7px 15px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--txt);font-size:13px;font-weight:600}
+.datestrip a:hover{border-color:var(--grn);text-decoration:none}
+.datestrip a.live{color:var(--red);border-color:#f0b8b3}
 """
 
 SPORTS_NAV = ["Football", "American Football", "Basketball", "Ice Hockey",
@@ -728,7 +761,7 @@ gtag('config','%s');
 </script>""" % (GA_MEASUREMENT_ID, GA_MEASUREMENT_ID))
 
 
-def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
+def page(title, desc, path, crumbs, body_html, extra_jsonld=None, layout=None):
     canon = BASE_URL + path
     scripts = [jsonld_breadcrumbs(crumbs)]
     if extra_jsonld:
@@ -741,7 +774,15 @@ def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
     sport_links = "".join(
         '<a href="/%s/">%s</a>' % (slugify(s), esc(s))
         for s in SPORTS_NAV)
-    return """<!DOCTYPE html>
+    if layout:
+        main_html = ('<main class="wrap wrap-wide"><div class="layout">'
+                     '<aside class="side">%s</aside>'
+                     '<div class="content">%s</div>'
+                     '<aside class="rail">%s</aside></div></main>'
+                     % (layout[0], body_html, layout[1]))
+    else:
+        main_html = '<main class="wrap">\n%s\n</main>' % body_html
+    return ("""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -765,9 +806,7 @@ def page(title, desc, path, crumbs, body_html, extra_jsonld=None):
 <input name="q" placeholder="Search teams &amp; leagues" aria-label="Search teams and leagues" autocomplete="off">
 </form>
 </div><nav class="main">%s%s<a href="/favourites/">&#9733; Favourites</a></nav></header>
-<main class="wrap">
 %s
-</main>
 <footer><div class="wrap">
 <span><b>Score</b>Buzz &mdash; live scores, fixtures, results, lineups and stats.</span>
 <span>Data: ESPN. Updated %s UTC.</span>
@@ -835,8 +874,9 @@ setTimeout(refresh,6000);setInterval(refresh,60000);
 </script>
 </body>
 </html>""" % (esc(title), esc(desc), canon, esc(title), esc(desc), canon,
-               ga_snippet(), CSS, ld, nav, sport_links, body_html,
-               datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))
+               ga_snippet(), CSS, ld, nav, sport_links, "@@MAIN@@",
+               datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))).replace(
+        "@@MAIN@@", main_html)
 
 
 CHANGED_URLS = []  # pages whose HTML actually changed this build (for IndexNow)
@@ -998,6 +1038,83 @@ def _day_label(d, today):
     return fmt_date(datetime(d.year, d.month, d.day, tzinfo=timezone.utc))
 
 
+
+def _sidebar_html():
+    """Left rail: sports quick links + every competition, grouped by sport.
+    Built from the LEAGUES config tuples (sport, code, name, slug, label, key).
+    All links use the existing paths — nothing new is introduced."""
+    out = ['<div class="sidebox"><h3>Sports</h3><a href="/">All Sports '
+           '<span class="cnt">live</span></a>']
+    out.append('<a href="/cricket/">Cricket</a>')
+    for s in SPORTS_NAV:
+        out.append('<a href="/%s/">%s</a>' % (slugify(s), esc(s)))
+    out.append('<a href="/leagues/">All Leagues</a>')
+    out.append('<a href="/favourites/">&#9733; Favourites</a></div>')
+    groups, order = {}, []
+    for row in LEAGUES:
+        label = row[4]
+        if label not in groups:
+            groups[label] = []
+            order.append(label)
+        groups[label].append((row[3], row[2]))
+    out.append('<div class="sidebox scroll"><h3>Competitions</h3>')
+    for label in order:
+        out.append('<h4>%s</h4>' % esc(label))
+        for slug, name in groups[label]:
+            out.append('<a href="/football/%s/">%s</a>' % (slug, esc(name)))
+    out.append('</div>')
+    return "".join(out)
+
+
+def _mini_row(m):
+    hs, aws = m["home"].get("score"), m["away"].get("score")
+    sc = ("%s - %s" % (esc(hs), esc(aws))) if hs is not None else esc(fmt_time(m["date"]))
+    if m["state"] == "in":
+        tag = '<span class="ml">LIVE</span>'
+    else:
+        tag = '<span class="ml mut">%s</span>' % esc(status_label(m))
+    return ('<a class="mini" href="%s">%s<span class="mt">%s v %s</span>'
+            '<span class="ms">%s</span></a>'
+            % (match_path(m), tag,
+               esc(m["home"]["short"] or m["home"]["name"]),
+               esc(m["away"]["short"] or m["away"]["name"]), sc))
+
+
+def _rail_html(live, upcoming=None):
+    """Right rail: live-now mini list + popular leagues + about box."""
+    out = ['<div class="sidebox"><h3>&#9679; Live Now</h3>']
+    if live:
+        out += [_mini_row(m) for m in live[:8]]
+    else:
+        out.append('<p class="meta">No live matches right now.</p>')
+    out.append('</div>')
+    tops = sorted(LEAGUES, key=lambda r: _league_rank(r[3]))[:7]
+    out.append('<div class="sidebox"><h3>Popular Leagues</h3>')
+    for row in tops:
+        out.append('<a href="/football/%s/">%s</a>' % (row[3], esc(row[2])))
+    out.append('</div>')
+    out.append('<div class="sidebox"><h3>ScoreBuzz</h3>'
+               '<p class="meta">Live scores, fixtures, results, lineups and '
+               'stats across %d competitions. No betting, just the game.</p></div>'
+               % len(LEAGUES))
+    return "".join(out)
+
+
+def _lgroup(slug, name, rows_html, cnt_text=""):
+    return ('<section class="lgroup"><div class="lg-head">'
+            '<a href="/football/%s/">%s</a><span class="lg-cnt">%s</span></div>'
+            '%s</section>' % (slug, esc(name), esc(cnt_text), rows_html))
+
+
+def _datestrip_html():
+    t = today_utc()
+    chips = ['<a class="live" href="#live">&#9679; Live</a>']
+    for delta, label in ((-1, "Yesterday"), (0, "Today"), (1, "Tomorrow")):
+        d = t + timedelta(days=delta)
+        chips.append('<a href="#day-%s">%s</a>' % (d.isoformat(), label))
+    return '<div class="datestrip">%s</div>' % "".join(chips)
+
+
 def build_sport_page(sport_label, sport_slug, sport_leagues, events):
     """Clean category page: /<sport-slug>/ with that sport's leagues + fixtures."""
     today = today_utc()
@@ -1014,7 +1131,7 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
     crumbs = [("Home", "/"), (sport_label, path)]
     body = ["<h1>%s Scores &amp; Fixtures</h1>" % esc(sport_label)]
     if live:
-        body.append('<div class="card"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+        body.append('<div class="card" id="live"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
                     % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
@@ -1028,36 +1145,34 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
     if upcoming:
         body.append("<h2>Upcoming Fixtures</h2>")
         for d, by_league in _group_by_day(upcoming):
-            body.append('<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
-                        % esc(_day_label(d, today)))
+            body.append('<h3 id="day-%s" style="font-size:14px;margin:10px 0 4px">%s</h3>'
+                        % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
             for slug in sorted(by_league):
                 ms = sorted(by_league[slug],
                             key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
                 lg = next((l for l in sport_leagues if l["slug"] == slug), None)
-                body.append('<div class="card"><h3 style="font-size:15px;margin-bottom:4px">'
-                            '<a href="/football/%s/">%s</a></h3>'
-                            % (slug, esc(lg["name"] if lg else slug)))
-                body += [match_row(m) for m in ms]
-                body.append("</div>")
+                body.append(_lgroup(slug, lg["name"] if lg else slug,
+                                    "".join(match_row(m) for m in ms),
+                                    "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
     if recent:
         body.append("<h2>Recent Results</h2>")
         for d, by_league in _group_by_day(recent):
-            body.append('<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
-                        % esc(_day_label(d, today)))
+            body.append('<h3 id="day-%s" style="font-size:14px;margin:10px 0 4px">%s</h3>'
+                        % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
             for slug in sorted(by_league):
                 ms = sorted(by_league[slug],
                             key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
                             reverse=True)
                 lg = next((l for l in sport_leagues if l["slug"] == slug), None)
-                body.append('<div class="card"><h3 style="font-size:15px;margin-bottom:4px">'
-                            '<a href="/football/%s/">%s</a></h3>'
-                            % (slug, esc(lg["name"] if lg else slug)))
-                body += [match_row(m) for m in ms]
-                body.append("</div>")
+                body.append(_lgroup(slug, lg["name"] if lg else slug,
+                                    "".join(match_row(m) for m in ms),
+                                    "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
+    body.insert(1, _datestrip_html())
     return page("%s Scores, Fixtures & Results | ScoreBuzz" % sport_label,
                 "Live %s scores, upcoming fixtures, results, lineups and stats on ScoreBuzz."
                 % sport_label.lower(),
-                path, crumbs, "\n".join(body))
+                path, crumbs, "\n".join(body),
+                layout=(_sidebar_html(), _rail_html(live, upcoming)))
 
 
 _MOTD_LEAGUE_RANK = [
@@ -1143,14 +1258,15 @@ _SPORT_LABEL = {"football": "Football", "nfl": "American Football", "nba": "Bask
 def build_home(live, upcoming, recent, leagues, trend_html=""):
     lg_name = {l["slug"]: l["name"] for l in leagues}
     today = today_utc()
-    body = [trend_html, "<style>%s</style>" % _MOTD_CSS, "<h1>Live Scores &amp; Fixtures</h1>"]
+    body = [trend_html, "<style>%s</style>" % _MOTD_CSS, "<h1>Live Scores &amp; Fixtures</h1>",
+            _datestrip_html()]
 
     motd = _match_of_day(live, upcoming)
     if motd:
         body.append(_motd_html(motd, lg_name))
 
     if live:
-        body.append('<div class="card"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+        body.append('<div class="card" id="live"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
                     % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
@@ -1174,15 +1290,14 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
                         % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
                            "match" if len(ms) == 1 else "matches"))
             for d, by_league in _group_by_day(ms):
-                body.append('<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
-                            % esc(_day_label(d, today)))
+                body.append('<h3 id="day-%s" style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                            % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
                 for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
                     lms = sorted(by_league[slug],
                                  key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
-                    body.append('<div class="card"><h3 style="font-size:14px;margin-bottom:4px">'
-                                '<a href="/football/%s/">%s</a></h3>' % (slug, esc(lg_name.get(slug, slug))))
-                    body += [match_row(m) for m in lms]
-                    body.append("</div>")
+                    body.append(_lgroup(slug, lg_name.get(slug, slug),
+                                        "".join(match_row(m) for m in lms),
+                                        "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
     if recent:
         body.append("<h2>Recent Results</h2>")
         for sport in sorted(by_sport(recent),
@@ -1192,16 +1307,15 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
                         % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
                            "match" if len(ms) == 1 else "matches"))
             for d, by_league in _group_by_day(ms):
-                body.append('<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
-                            % esc(_day_label(d, today)))
+                body.append('<h3 id="day-%s" style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                            % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
                 for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
                     lms = sorted(by_league[slug],
                                  key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
                                  reverse=True)
-                    body.append('<div class="card"><h3 style="font-size:14px;margin-bottom:4px">'
-                                '<a href="/football/%s/">%s</a></h3>' % (slug, esc(lg_name.get(slug, slug))))
-                    body += [match_row(m) for m in lms]
-                    body.append("</div>")
+                    body.append(_lgroup(slug, lg_name.get(slug, slug),
+                                        "".join(match_row(m) for m in lms),
+                                        "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
     body.append("<h2>Leagues</h2><div class='card'>")
     for lg in leagues:
         body.append('<p><a href="/football/%s/">%s</a> '
@@ -1211,7 +1325,8 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
     return page("Live Football Scores, Fixtures & Results | ScoreBuzz",
                 "ScoreBuzz: live scores, upcoming fixtures, results, lineups, "
                 "stats and standings across football, NFL, NBA, NHL, MLB, tennis and MMA.",
-                "/", [("Home", "/")], "\n".join(body))
+                "/", [("Home", "/")], "\n".join(body),
+                layout=(_sidebar_html(), _rail_html(live, upcoming)))
 
 
 def build_league(league, events, standings, trend_html=""):
@@ -1262,7 +1377,8 @@ def build_league(league, events, standings, trend_html=""):
     return page("%s Fixtures, Results, Live Scores & Standings | ScoreBuzz"
                 % league["name"],
                 "All %s fixtures, live scores, results and standings on ScoreBuzz."
-                % league["name"], path, crumbs, "\n".join(body))
+                % league["name"], path, crumbs, "\n".join(body),
+                layout=(_sidebar_html(), _rail_html(live, upcoming)))
 
 
 def pretty_stat(name):

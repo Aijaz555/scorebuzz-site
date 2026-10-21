@@ -15,8 +15,8 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-ARCHIVE_KEEP_DAYS = 1095  # 3 years of match history
-TEMPLATE_VERSION = 1  # bump when match page templates change (forces re-render)
+ARCHIVE_KEEP_DAYS = 1825  # 5 years of match history (covers 2022 backfill)
+TEMPLATE_VERSION = 2  # bump when match page templates change (forces re-render)
 
 
 def _encode(o):
