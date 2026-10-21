@@ -675,6 +675,18 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .hero-mid{flex:none;min-width:112px}
 .scoreboard-hero .big{font-size:34px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
 .hero-status{margin-top:3px}
+.cd{display:flex;align-items:flex-start;justify-content:center;gap:5px}
+.cd-u{background:linear-gradient(180deg,#0e5136,#0b3524);color:#fff;border-radius:9px;min-width:52px;padding:6px 4px 5px;text-align:center;box-shadow:0 2px 6px rgba(11,53,36,.28)}
+.cd-n{display:block;font-size:23px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.cd-l{display:block;font-size:9px;letter-spacing:1.5px;color:#9fd4b4;margin-top:3px;font-weight:700}
+.cd-sep{font-size:20px;font-weight:800;color:var(--grn);padding-top:5px}
+.wbtn{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:var(--acc);color:#fff;font-weight:700;font-size:13.5px;padding:8px 20px;border-radius:999px;box-shadow:0 2px 8px rgba(20,71,200,.3)}
+.wbtn:hover{text-decoration:none;filter:brightness(1.1)}
+.wbtn.live{background:var(--red);box-shadow:0 2px 8px rgba(217,45,32,.35)}
+.wbtn .pulse{background:#fff}
+.rwbtn{flex:none;font-size:11.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#e8effc;color:var(--acc);white-space:nowrap}
+.rwbtn.live{background:#fdeceb;color:var(--red)}
+@media(max-width:560px){.cd-u{min-width:44px}.cd-n{font-size:19px}}
 .scorers{display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
 .sc-side{flex:1;line-height:1.6;min-width:0}
 .sc-home{text-align:right}
@@ -897,6 +909,9 @@ if(H&&he&&H.score!=null)he.textContent=H.score;
 if(A&&ae&&A.score!=null)ae.textContent=A.score;
 var big=r.querySelector('.js-big');
 if(big&&H&&A&&H.score!=null&&A.score!=null)big.textContent=H.score+' - '+A.score;
+var cd=r.querySelector('.js-cd');var wb=r.querySelector('.js-wbtn');
+if(st.state==='in'){if(cd)cd.style.display='none';if(big)big.style.display='';if(wb){wb.innerHTML='\u25cf LIVE';wb.classList.add('live');}}
+else if(st.state==='post'){if(cd)cd.style.display='none';if(big)big.style.display='';if(wb)wb.style.display='none';}
 var el=r.querySelector('.js-st');var det=st.detail||'';
 if(st.state==='post'){r._state='post';r.setAttribute('data-state','post');
 if(el){el.textContent=st.shortDetail||det||'FT';el.classList.remove('live');}}
@@ -919,6 +934,8 @@ by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);})
 }
 setTimeout(refresh,3000);setInterval(refresh,15000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
+var cds=document.querySelectorAll('.js-cd');
+if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var eh=cd.querySelector('.js-cd-h'),em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');if(eh)eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);});};tickCd();setInterval(tickCd,1000);}
 var strip=document.querySelector('.datestrip');
 if(strip){
 function applyF(f,day,isToday,a){
@@ -1036,11 +1053,17 @@ def match_row(m, comp=None):
             'aria-label="Save to favourites">&#9734;</button>'
             % (esc(fkey), esc(fname), esc(fdate)))
     comp_html = '<div class="mcomp">%s</div>' % esc(comp) if comp else ""
+    if m["state"] == "pre":
+        pill = '<span class="rwbtn js-wbtn">&#9654; Watch</span>'
+    elif m["state"] == "in":
+        pill = '<span class="rwbtn live js-wbtn">&#9679; LIVE</span>'
+    else:
+        pill = ""
     return ('<div class="mrow"%s>%s<a href="%s" style="flex:1;display:flex;'
             'align-items:center;gap:10px;min-width:0;color:inherit">'
-            '%s<div class="teams">%s%s%s</div>%s</a>%s</div>'
+            '%s<div class="teams">%s%s%s</div>%s%s</a>%s</div>'
             % (_live_attrs(m), st, match_path(m), "", nm(m["home"], hs),
-               nm(m["away"], aws), comp_html, sc, star))
+               nm(m["away"], aws), comp_html, sc, pill, star))
 
 
 def is_derby(m):
@@ -1919,7 +1942,7 @@ if(added)show(plays.length-1,true);};
 setTimeout(poll,15000);})();}
 })();
 </script>""".replace("%%PLAYS%%", data_json).replace("%%META%%", meta_json)
-    return ("""<h2>Live Game View</h2><div class="card">
+    return ("""<h2 id="sbzWatch">Live Game View</h2><div class="card">
 <div class="sbz-field" role="img" aria-label="Animated field showing ball position from real play data">
 <div class="sbz-ez" style="left:0">%s</div>
 <div class="sbz-ez" style="right:0">%s</div>
@@ -1990,7 +2013,7 @@ if(added)render();};
 setTimeout(poll,15000);})();}
 })();
 </script>""".replace("%%CAST%%", data_json).replace("%%META%%", meta_json)
-    return ("""<h2>Live Gamecast</h2><div class="card">
+    return ("""<h2 id="sbzWatch">Live Gamecast</h2><div class="card">
 <div class="sbz-chead"><span id="sbzCScore">%s vs %s</span><span class="ck" id="sbzCClock"></span></div>
 <div id="sbzCPlays"></div>
 </div>
@@ -2105,24 +2128,47 @@ def build_match(m, summ):
     elif m["city"]:
         venue_line = m["city"]
     meta_line = " \u00b7 ".join(b for b in (when, venue_line) if b)
+    big_html = ('<div class=\'big js-big\'>%s %s %s</div>'
+                % (esc(hs if hs is not None else ""),
+                   '<span class="vs">-</span>' if hs is not None else '<span class="vs">vs</span>',
+                   esc(aws if aws is not None else "")))
+    action = ""
+    mid_inner = big_html
+    if m["state"] == "pre":
+        action = "<a class='wbtn js-wbtn' href='#sbzWatch'>&#9654; Watch</a>"
+        if m["date"]:
+            rem = max(0, int((m["date"] - datetime.now(timezone.utc)).total_seconds()))
+            hh, rem = divmod(rem, 3600)
+            mi, ss = divmod(rem, 60)
+            mid_inner = (
+                "<div class='cd js-cd' data-kickoff='%s'>"
+                "<div class='cd-u'><span class='cd-n js-cd-h'>%02d</span><span class='cd-l'>HRS</span></div>"
+                "<span class='cd-sep'>:</span>"
+                "<div class='cd-u'><span class='cd-n js-cd-m'>%02d</span><span class='cd-l'>MIN</span></div>"
+                "<span class='cd-sep'>:</span>"
+                "<div class='cd-u'><span class='cd-n js-cd-s'>%02d</span><span class='cd-l'>SEC</span></div>"
+                "</div>"
+                "<div class='big js-big' style='display:none'></div>"
+                % (m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"), hh, mi, ss))
+    elif m["state"] == "in":
+        action = ("<a class='wbtn live js-wbtn' href='#sbzWatch'>"
+                  "<span class='pulse'></span>LIVE</a>")
     hero = (
         "<div class='card scoreboard-hero'%s>"
         "<div class='hero-comp'><a href='%s'>%s</a></div>"
         "<div class='hero-meta'>%s</div>"
         "<div class='hero-row'>"
         "<a class='hero-team ht-home' href='/team/%s/'><span class='nm'>%s</span>%s</a>"
-        "<div class='hero-mid'><div class='big js-big'>%s %s %s</div>"
-        "<div class='hero-status'>%s</div></div>"
+        "<div class='hero-mid'>%s"
+        "<div class='hero-status'>%s</div>%s</div>"
         "<a class='hero-team ht-away' href='/team/%s/'>%s<span class='nm'>%s</span></a>"
         "</div>%s</div>"
         % (_live_attrs(m),
            league_path(lg), esc(lg["name"]),
            esc(meta_line),
            esc(team_slug(m["home"])), esc(m["home"]["name"]), team_img(m["home"], 46),
-           esc(hs if hs is not None else ""),
-           '<span class="vs">-</span>' if hs is not None else '<span class="vs">vs</span>',
-           esc(aws if aws is not None else ""),
-           badge,
+           mid_inner,
+           badge, action,
            esc(team_slug(m["away"])), team_img(m["away"], 46), esc(m["away"]["name"]),
            _scorers_html(m, summ)))
     parts = [hero]
