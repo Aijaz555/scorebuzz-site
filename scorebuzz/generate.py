@@ -686,6 +686,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .wbtn .pulse{background:#fff}
 .rwbtn{flex:none;font-size:11.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#e8effc;color:var(--acc);white-space:nowrap}
 .rwbtn.live{background:#fdeceb;color:var(--red)}
+.cdmini{color:var(--grn);font-weight:800;font-variant-numeric:tabular-nums;font-size:14.5px;white-space:nowrap}
 @media(max-width:560px){.cd-u{min-width:44px}.cd-n{font-size:19px}}
 .scorers{display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
 .sc-side{flex:1;line-height:1.6;min-width:0}
@@ -910,8 +911,12 @@ if(A&&ae&&A.score!=null)ae.textContent=A.score;
 var big=r.querySelector('.js-big');
 if(big&&H&&A&&H.score!=null&&A.score!=null)big.textContent=H.score+' - '+A.score;
 var cd=r.querySelector('.js-cd');var wb=r.querySelector('.js-wbtn');
-if(st.state==='in'){if(cd)cd.style.display='none';if(big)big.style.display='';if(wb){wb.innerHTML='\u25cf LIVE';wb.classList.add('live');}}
-else if(st.state==='post'){if(cd)cd.style.display='none';if(big)big.style.display='';if(wb)wb.style.display='none';}
+if(cd&&(st.state==='in'||st.state==='post')){cd.setAttribute('data-done','1');
+if(big){cd.style.display='none';big.style.display='';}
+else if(H&&A&&H.score!=null&&A.score!=null){cd.textContent=H.score+' - '+A.score;cd.style.display='';}
+else{cd.style.display='none';}}
+if(st.state==='in'){if(wb){wb.innerHTML='\u25cf LIVE';wb.classList.add('live');}}
+else if(st.state==='post'){if(wb)wb.style.display='none';}
 var el=r.querySelector('.js-st');var det=st.detail||'';
 if(st.state==='post'){r._state='post';r.setAttribute('data-state','post');
 if(el){el.textContent=st.shortDetail||det||'FT';el.classList.remove('live');}}
@@ -935,7 +940,7 @@ by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);})
 setTimeout(refresh,3000);setInterval(refresh,15000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
 var cds=document.querySelectorAll('.js-cd');
-if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var eh=cd.querySelector('.js-cd-h'),em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');if(eh)eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);});};tickCd();setInterval(tickCd,1000);}
+if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){if(cd.getAttribute('data-done')==='1')return;var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var eh=cd.querySelector('.js-cd-h');if(eh){var em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);}else{cd.textContent=p(h)+':'+p(mi)+':'+p(se);}});};tickCd();setInterval(tickCd,1000);}
 var strip=document.querySelector('.datestrip');
 if(strip){
 function applyF(f,day,isToday,a){
@@ -1039,7 +1044,13 @@ def match_row(m, comp=None):
         cls = "w" if t.get("winner") and s is not None else ""
         return ('<div class="tn">%s%s</div>'
                 % (team_img(t), esc(t["short"] or t["name"])))
-    if hs is None:
+    if m["state"] == "pre" and m["date"]:
+        _rem = max(0, int((m["date"] - datetime.now(timezone.utc)).total_seconds()))
+        _hh, _rem = divmod(_rem, 3600)
+        _mi, _ss = divmod(_rem, 60)
+        sc = ('<div class="sc cdmini js-cd" data-kickoff="%s">%02d:%02d:%02d</div>'
+              % (m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"), _hh, _mi, _ss))
+    elif hs is None:
         sc = '<div class="sc">%s</div>' % esc(fmt_time(m["date"]))
     else:
         sc = ('<div class="sc"><span class="js-hs %s">%s</span><br>'
