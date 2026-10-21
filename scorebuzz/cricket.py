@@ -484,11 +484,14 @@ def _clean_team(n):
     return re.sub(r"[^a-z0-9 ]", "", n)
 
 
-def _espn_find_event(evs, t1, t2):
-    """The ESPN event for these two teams, or None."""
+def _espn_find_event(evs, t1, t2, when=None):
+    """The ESPN event for these two teams, or None. When several events
+    match the pair (same teams meet repeatedly in a series), the one
+    nearest in time to `when` wins."""
     a, b = _clean_team(t1), _clean_team(t2)
     if not a or not b:
         return None
+    cands = []
     for e in evs or []:
         comps = ((e.get("competitions") or [{}])[0]).get("competitors") or []
         names = [_clean_team((c.get("team") or {}).get("displayName"))
@@ -497,13 +500,23 @@ def _espn_find_event(evs, t1, t2):
             continue
         if ((a in names[0] or names[0] in a) and (b in names[1] or names[1] in b)) \
                 or ((a in names[1] or names[1] in a) and (b in names[0] or names[0] in b)):
-            return e
-    return None
+            cands.append(e)
+    if not cands:
+        return None
+    if when is not None and len(cands) > 1:
+        def _gap(e):
+            try:
+                dt = datetime.fromisoformat(str(e.get("date")).replace("Z", "+00:00"))
+                return abs((dt - when).total_seconds())
+            except Exception:
+                return 1e18
+        cands.sort(key=_gap)
+    return cands[0]
 
 
-def _espn_match_state(evs, t1, t2):
+def _espn_match_state(evs, t1, t2, when=None):
     """Probe-style verdict {'state','status','score_text'} from ESPN."""
-    e = _espn_find_event(evs, t1, t2)
+    e = _espn_find_event(evs, t1, t2, when)
     if not e:
         return None
     st = ((e.get("status") or {}).get("type") or {}).get("state")
@@ -517,7 +530,8 @@ def _espn_match_state(evs, t1, t2):
             parts.append("%s %s" % ((c.get("team") or {}).get("displayName"), sc))
     summ = (e.get("status") or {}).get("summary") or ""
     return {"state": "live" if st == "in" else "recent",
-            "status": summ, "score_text": "   ".join(parts)}
+            "status": summ, "score_text": "   ".join(parts),
+            "espn_event_id": str(e.get("id") or "")}
 
 
 def _espn_summary(series_id, event_id):
@@ -540,14 +554,14 @@ def _espn_summary(series_id, event_id):
     return data
 
 
-def _espn_scorecard(series_id, evs, t1, t2):
+def _espn_scorecard(series_id, evs, t1, t2, when=None):
     """Partial scorecard from ESPN data, in parse_scorecard's shape:
     innings totals/overs from the scoreboard linescores (always
     current), toss from the match summary line, squads + officials
     from the summary endpoint. Batting/bowling cards are NOT in
     ESPN's feed — those sections stay empty until CricAPI's own
     scorecard arrives, and take over then."""
-    e = _espn_find_event(evs, t1, t2)
+    e = _espn_find_event(evs, t1, t2, when)
     if not e:
         return None
     comps = ((e.get("competitions") or [{}])[0]).get("competitors") or []
@@ -804,7 +818,7 @@ def fetch_cricket():
                     # tiebreaker — free and usually current.
                     ev = _espn_match_state(
                         _espn_series_events(espn_id),
-                        m["team1"], m["team2"])
+                        m["team1"], m["team2"], m.get("date"))
                     if ev:
                         p = ev
                         probes[m["id"]] = p
@@ -816,7 +830,7 @@ def fetch_cricket():
                     # (its events cache refreshes every 10 minutes).
                     ev = _espn_match_state(
                         _espn_series_events(espn_id),
-                        m["team1"], m["team2"])
+                        m["team1"], m["team2"], m.get("date"))
                     if ev and ev.get("state") == "recent":
                         p = ev
                         probes[m["id"]] = p
@@ -831,6 +845,9 @@ def fetch_cricket():
                         _cache_put("probes.json", probes)
                 if p and p.get("state") in ("live", "recent"):
                     m["state"] = p["state"]
+                    if p.get("espn_event_id"):
+                        m["espn_event_id"] = p["espn_event_id"]
+                        m["espn_series_id"] = espn_id
                     if p.get("status"):
                         m["status"] = p["status"]
                     if p.get("score_text"):
@@ -842,7 +859,7 @@ def fetch_cricket():
                     if not m.get("scorecard") and espn_id:
                         esc_card = _espn_scorecard(
                             espn_id, _espn_series_events(espn_id),
-                            m["team1"], m["team2"])
+                            m["team1"], m["team2"], m.get("date"))
                         if esc_card and esc_card.get("innings"):
                             m["scorecard"] = esc_card
             _cache_put("probes.json", probes)
@@ -859,6 +876,24 @@ def fetch_cricket():
                    or (not m["date"] and m["state"] == "upcoming")]
         matches.sort(key=lambda m: ({"live": 0, "upcoming": 1, "recent": 2}[m["state"]],
                                      m["date"] or datetime.max.replace(tzinfo=timezone.utc)))
+        try:
+            emap = _espn_map()
+            evs_cache = {}
+            for m in matches:
+                if m.get("espn_event_id") or m["state"] not in ("live", "upcoming"):
+                    continue
+                sid = emap.get(m.get("series_slug") or "")
+                if not sid:
+                    continue
+                if sid not in evs_cache:
+                    evs_cache[sid] = _espn_series_events(sid)
+                e = _espn_find_event(evs_cache[sid], m["team1"], m["team2"],
+                                     m.get("date"))
+                if e and e.get("id"):
+                    m["espn_event_id"] = str(e["id"])
+                    m["espn_series_id"] = sid
+        except Exception as e:
+            log("espn hook pass failed gracefully: %s" % e)
         result["matches"] = matches
         result["results_store"] = _update_results_store(matches)
         result["series"] = [s for s in series_by_slug.values() if s["matches"]]

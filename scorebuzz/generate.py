@@ -840,9 +840,17 @@ if(r._state!=='in'||r._clk==null||r.getAttribute('data-tick')!=='1')return;
 var adv=Math.floor((now-r._at)/1000);if(adv>75)adv=75;
 var mm=Math.floor((r._clk+adv)/60);var el=r.querySelector('.js-st');
 if(el)el.textContent='LIVE '+mm+String.fromCharCode(39);
-});},5000);
+});},1000);
 function upd(r,e){
 var st=(e.status&&e.status.type)||{};var comp=(e.competitions||[])[0]||{};var cs=comp.competitors||[];
+if(r.getAttribute('data-cricket')==='1'){
+var parts=[];cs.forEach(function(c){var s=c.score;if(s!=null&&String(s)!==''){parts.push((((c.team||{}).displayName)||'')+' '+s);}});
+var cel=r.querySelector('.js-cs');if(cel&&parts.length)cel.textContent=parts.join('   ');
+var el2=r.querySelector('.js-st');var summ=(e.status||{}).summary||'';
+if(st.state==='post'){r._state='post';r.setAttribute('data-state','post');if(el2){el2.textContent=summ||'Result';el2.classList.remove('live');}}
+else if(st.state==='in'){r._state='in';if(el2){el2.textContent='\u25cf LIVE';el2.classList.add('live');}}
+return;
+}
 var H=null,A=null;cs.forEach(function(c){if(c.homeAway==='home')H=c;if(c.homeAway==='away')A=c;});
 var he=r.querySelector('.js-hs'),ae=r.querySelector('.js-as');
 if(H&&he&&H.score!=null)he.textContent=H.score;
@@ -869,7 +877,8 @@ by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);})
 }).catch(function(){});
 });
 }
-setTimeout(refresh,6000);setInterval(refresh,60000);
+setTimeout(refresh,3000);setInterval(refresh,15000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
 })();
 </script>
 </body>
@@ -2088,16 +2097,29 @@ def cricket_url(cm):
     return "/cricket/%s/%s/" % (cm["series_slug"], cm["slug"])
 
 
+def _cricket_hooks(cm):
+    """data-* hooks for the browser live updater, when this match has an
+    ESPN identity (mapped series): the browser polls ESPN's series
+    scoreboard directly and rewrites the score in place."""
+    eid = cm.get("espn_event_id")
+    sid = cm.get("espn_series_id")
+    if not eid or not sid:
+        return ""
+    state = {"live": "in", "upcoming": "pre", "recent": "post"}.get(cm["state"], "pre")
+    return (' data-eid="%s" data-espn="cricket/%s" data-state="%s" data-cricket="1"'
+            % (esc(eid), esc(sid), state))
+
+
 def cricket_match_row(cm):
     url = cricket_url(cm)
     if cm["state"] == "live":
-        st = '<span class="st live">● LIVE</span>'
+        st = '<span class="st js-st live">● LIVE</span>'
     elif cm["state"] == "upcoming":
         dt = (fmt_date(cm["date"]) + " " + fmt_time(cm["date"])
               if cm["date"] else "Scheduled")
-        st = '<span class="st">%s</span>' % esc(dt)
+        st = '<span class="st js-st">%s</span>' % esc(dt)
     else:
-        st = '<span class="st">%s</span>' % esc(cm["status"] or "Result")
+        st = '<span class="st js-st">%s</span>' % esc(cm["status"] or "Result")
 
     def logo(tname):
         img = (cm.get("team_imgs") or {}).get((tname or "").lower())
@@ -2109,17 +2131,17 @@ def cricket_match_row(cm):
     teams_html = ('<div class="tn">%s%s</div><div class="tn">%s%s</div>'
                   % (logo(cm["team1"]), esc(cm["team1"] or "?"),
                      logo(cm["team2"]), esc(cm["team2"] or "?")))
-    sc = ('<div class="sc" style="font-weight:400;font-size:13px">%s</div>'
+    sc = ('<div class="sc js-cs" style="font-weight:400;font-size:13px">%s</div>'
           % esc(cm["score_text"])) if cm["score_text"] else \
-        '<div class="sc meta">%s</div>' % esc(cm["match_type"] or "")
+        '<div class="sc js-cs meta">%s</div>' % esc(cm["match_type"] or "")
     star = ('<button class="fav-star" data-fkey="cmatch:%s" data-fname="%s" '
             'data-fdate="%s" aria-label="Save to favourites">&#9734;</button>'
             % (esc(url), esc(cm["name"]),
                esc(cm["date"].strftime("%Y-%m-%d") if cm["date"] else "")))
-    return ('<div class="mrow">%s<a href="%s" style="flex:1;display:flex;'
+    return ('<div class="mrow"%s>%s<a href="%s" style="flex:1;display:flex;'
             'align-items:center;gap:10px;min-width:0;color:inherit">'
             '<div class="teams">%s</div>%s</a>%s</div>'
-            % (st, url, teams_html, sc, star))
+            % (_cricket_hooks(cm), st, url, teams_html, sc, star))
 
 
 def build_cricket_index(matches, series):
@@ -2609,13 +2631,13 @@ def build_cricket_match(cm):
                 esc(img), esc(tname), size, size)
         return ""
 
-    badge = ('<span class="badge live">● LIVE</span>' if state == "live"
-             else '<span class="badge">%s</span>' % esc(cm["status"] or state.title()))
-    hero = ("""<div class='card scoreboard-hero'>%s
-<div class='nm'>%s %s</div><div class='big' style='font-size:22px'>%s</div>
+    badge = ('<span class="badge js-st live">● LIVE</span>' if state == "live"
+             else '<span class="badge js-st">%s</span>' % esc(cm["status"] or state.title()))
+    hero = ("""<div class='card scoreboard-hero'%s>%s
+<div class='nm'>%s %s</div><div class='big js-cs' style='font-size:22px'>%s</div>
 <div class='nm'>%s %s</div>
 <p class='meta'>%s%s%s &middot; %s</p></div>"""
-            % (badge, logo(cm["team1"]), esc(cm["team1"]),
+            % (_cricket_hooks(cm), badge, logo(cm["team1"]), esc(cm["team1"]),
                esc(cm["score_text"] or "vs"),
                logo(cm["team2"]), esc(cm["team2"]),
                esc(cm["venue"]), " — " if cm["venue"] and cm["date"] else "",
