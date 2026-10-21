@@ -3305,8 +3305,17 @@ def main():
                          % (lg["slug"], sp, lg["slug"]))
     write_file("_redirects", "\n".join(redir) + "\n")
 
-    write_file("functions/img.js", IMG_FN_JS)
-    write_file("functions/api/[[path]].js", API_FN_JS)
+    # Pages Functions must live at the project root (repo root in CI),
+    # NOT inside the static output dir: wrangler pages deploy reads
+    # <cwd>/functions. Writing them into dist/ left the routes dead
+    # (SPA fallback served the homepage for /img and /api).
+    fn_root = os.path.normpath(os.path.join(HERE, "..", "functions"))
+    os.makedirs(os.path.join(fn_root, "api"), exist_ok=True)
+    with open(os.path.join(fn_root, "img.js"), "w", encoding="utf-8") as f:
+        f.write(IMG_FN_JS)
+    with open(os.path.join(fn_root, "api", "[[path]].js"), "w", encoding="utf-8") as f:
+        f.write(API_FN_JS)
+    shutil.rmtree(os.path.join(OUT_DIR, "functions"), ignore_errors=True)
     write_file("favicon.svg", FAVICON_SVG)
     write_binary("favicon-32.png", base64.b64decode(FAVICON32_B64))
     write_binary("apple-touch-icon.png", base64.b64decode(FAVICON180_B64))
