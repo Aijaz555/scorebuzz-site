@@ -13,6 +13,7 @@ on a 15-minute schedule.
 Usage: python3 generate.py
 """
 import json
+import shutil
 import os
 import re
 import sys
@@ -277,8 +278,27 @@ def match_slug(m):
                             m["id"])
 
 
+def sport_slug_of(label):
+    """URL segment for a sport category: Football->football,
+    American Football->american-football, Basketball->basketball, ..."""
+    return slugify(label or "Football")
+
+
+def league_path(lg):
+    """Category-correct league URL, e.g. /basketball/nba/ (dict form)."""
+    return "/%s/%s/" % (sport_slug_of(lg.get("sport_label")), lg["slug"])
+
+
+def league_path_for(label, slug):
+    return "/%s/%s/" % (sport_slug_of(label), slug)
+
+
+_SLUG_LABEL = {r[3]: r[4] for r in LEAGUES}
+
+
 def match_path(m):
-    return "/football/%s/%s/" % (m["league"]["slug"], match_slug(m))
+    return "/%s/%s/%s/" % (sport_slug_of(m["league"].get("sport_label")),
+                           m["league"]["slug"], match_slug(m))
 
 
 def team_slug(t):
@@ -1030,9 +1050,9 @@ def build_leagues_index(leagues):
         body.append('<h2 id="%s">%s</h2><div class="card">'
                     % (slugify(sport), esc(sport)))
         for lg in lgs:
-            body.append('<p><a href="/football/%s/">%s</a> '
+            body.append('<p><a href="%s">%s</a> '
                         '<span class="meta">— fixtures, results, standings</span></p>'
-                        % (lg["slug"], esc(lg["name"])))
+                        % (league_path(lg), esc(lg["name"])))
         body.append("</div>")
     return page("All Leagues — Fixtures, Results & Standings | ScoreBuzz",
                 "Browse every league on ScoreBuzz: football, NFL, NBA, NHL, MLB, "
@@ -1085,7 +1105,7 @@ def _sidebar_html():
     for label in order:
         out.append('<h4>%s</h4>' % esc(label))
         for slug, name in groups[label]:
-            out.append('<a href="/football/%s/">%s</a>' % (slug, esc(name)))
+            out.append('<a href="%s">%s</a>' % (league_path_for(label, slug), esc(name)))
     out.append('</div>')
     return "".join(out)
 
@@ -1115,7 +1135,7 @@ def _rail_html(live, upcoming=None):
     tops = sorted(LEAGUES, key=lambda r: _league_rank(r[3]))[:7]
     out.append('<div class="sidebox"><h3>Popular Leagues</h3>')
     for row in tops:
-        out.append('<a href="/football/%s/">%s</a>' % (row[3], esc(row[2])))
+        out.append('<a href="%s">%s</a>' % (league_path_for(row[4], row[3]), esc(row[2])))
     out.append('</div>')
     out.append('<div class="sidebox"><h3>ScoreBuzz</h3>'
                '<p class="meta">Live scores, fixtures, results, lineups and '
@@ -1126,8 +1146,9 @@ def _rail_html(live, upcoming=None):
 
 def _lgroup(slug, name, rows_html, cnt_text=""):
     return ('<section class="lgroup"><div class="lg-head">'
-            '<a href="/football/%s/">%s</a><span class="lg-cnt">%s</span></div>'
-            '%s</section>' % (slug, esc(name), esc(cnt_text), rows_html))
+            '<a href="%s">%s</a><span class="lg-cnt">%s</span></div>'
+            '%s</section>' % (league_path_for(_SLUG_LABEL.get(slug, "Football"), slug),
+                              esc(name), esc(cnt_text), rows_html))
 
 
 def _datestrip_html():
@@ -1168,9 +1189,9 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
     if sport_leagues:
         body.append('<div class="fhide"><h2>Leagues</h2><div class="card">')
         for lg in sport_leagues:
-            body.append('<p><a href="/football/%s/">%s</a> '
+            body.append('<p><a href="%s">%s</a> '
                         '<span class="meta">\u2014 fixtures, results, standings</span></p>'
-                        % (lg["slug"], esc(lg["name"])))
+                        % (league_path(lg), esc(lg["name"])))
         body.append("</div></div>")
     if upcoming:
         body.append('<section class="fsec"><h2>Upcoming Fixtures</h2>')
@@ -1259,10 +1280,10 @@ def _motd_html(m, lg_name):
 <div class='motd-mid'>%s</div>
 <a href='%s' class='motd-team'>%s<span>%s</span></a>
 </div>
-<div class='motd-lg'><a href='/football/%s/'>%s</a></div></div>"""
+<div class='motd-lg'><a href='%s'>%s</a></div></div>"""
             % (match_path(m), badge, match_path(m), team_img(m["home"], 64), esc(m["home"]["name"]),
                mid, match_path(m), team_img(m["away"], 64), esc(m["away"]["name"]),
-               lg["slug"], esc(lg_name.get(lg["slug"], lg["name"]))))
+               league_path(lg), esc(lg_name.get(lg["slug"], lg["name"]))))
 
 
 _MOTD_CSS = """
@@ -1365,9 +1386,9 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
         body.append("</section>")
     body.append('<div class="fhide"><h2>Leagues</h2><div class="card">')
     for lg in leagues:
-        body.append('<p><a href="/football/%s/">%s</a> '
+        body.append('<p><a href="%s">%s</a> '
                     '<span class="meta">\u2014 fixtures, results, standings</span></p>'
-                    % (lg["slug"], esc(lg["name"])))
+                    % (league_path(lg), esc(lg["name"])))
     body.append("</div></div>")
     return page("Live Football Scores, Fixtures & Results | ScoreBuzz",
                 "ScoreBuzz: live scores, upcoming fixtures, results, lineups, "
@@ -1382,9 +1403,9 @@ def build_league(league, events, standings, trend_html=""):
     finished = [m for m in events if m["state"] == "post"]
     body = [trend_html,
             "<h1>%s Fixtures, Results &amp; Standings "
-            '<button class="fav-star" data-fkey="league:/football/%s/" '
+            '<button class="fav-star" data-fkey="league:%s" '
             'data-fname="%s" aria-label="Save to favourites">&#9734;</button></h1>'
-            % (esc(league["name"]), league["slug"], esc(league["name"]))]
+            % (esc(league["name"]), league_path(league), esc(league["name"]))]
     if live:
         body.append('<div class="card"><span class="badge live">● LIVE</span>')
         body += [match_row(m) for m in live]
@@ -1419,7 +1440,7 @@ def build_league(league, events, standings, trend_html=""):
                                             "short": r["abbr"], "name": r["name"]}),
                                esc(r["name"]), tds))
             body.append("</table></div>")
-    path = "/football/%s/" % league["slug"]
+    path = league_path(league)
     crumbs = [("Home", "/"), (league["name"], path)]
     return page("%s Fixtures, Results, Live Scores & Standings | ScoreBuzz"
                 % league["name"],
@@ -2006,7 +2027,7 @@ def build_match(m, summ):
         parts.append("<div class='card'><p class='meta'>Lineups, stats and "
                      "live commentary will appear here once the match begins.</p></div>")
 
-    lg_path = "/football/%s/" % lg["slug"]
+    lg_path = league_path(lg)
     crumbs = [("Home", "/"), (lg["name"], lg_path),
               ("%s vs %s" % (m["home"]["short"], m["away"]["short"]), path)]
     return page(title, desc, path, crumbs, "\n".join(parts),
@@ -3047,7 +3068,7 @@ def main():
 
     # client-side search index: teams + leagues (zero backend)
     search_index = {
-        "leagues": ([{"n": lg["name"], "u": "/football/%s/" % lg["slug"],
+        "leagues": ([{"n": lg["name"], "u": league_path(lg),
                       "s": lg["sport_label"]} for lg in leagues] +
                     [{"n": s["name"], "u": "/cricket/%s/" % s["slug"],
                       "s": "Cricket"} for s in (cricket_data.get("series") or [])]),
@@ -3064,7 +3085,12 @@ def main():
         evs = arch_league_events.get(lg["slug"], [])
         if not evs and not standings.get(lg["slug"]):
             continue
-        urls.append(write_file("football/%s/index.html" % lg["slug"],
+        sp = sport_slug_of(lg["sport_label"])
+        if sp != "football":
+            legacy = os.path.join(OUT_DIR, "football", lg["slug"])
+            if os.path.isdir(legacy):
+                shutil.rmtree(legacy, ignore_errors=True)
+        urls.append(write_file("%s/%s/index.html" % (sp, lg["slug"]),
                                build_league(lg, evs, standings.get(lg["slug"]),
                                             trend_html)))
 
@@ -3074,7 +3100,8 @@ def main():
         lg_slug = m["league"]["slug"]
         rec = arc[lg_slug][str(m["id"])]
         h = "%s|v%d" % (rec["hash"], archive_mod.TEMPLATE_VERSION)
-        rel = "football/%s/%s/index.html" % (lg_slug, match_slug(m))
+        rel = "%s/%s/%s/index.html" % (
+            sport_slug_of(m["league"].get("sport_label")), lg_slug, match_slug(m))
         full = os.path.join(OUT_DIR, rel)
         page_url = "/" + rel
         if rec.get("rendered_hash") == h and os.path.exists(full):
@@ -3134,6 +3161,15 @@ def main():
         log("indexnow queue write failed: %s" % e)
     log("sitemap: %d main urls, %d match urls in %d match files"
         % (len(main_urls), len(match_urls), len(sitemap_files) - 1))
+    redir = []
+    for lg in leagues:
+        sp = sport_slug_of(lg["sport_label"])
+        if sp != "football":
+            redir.append("/football/%s /%s/%s/ 301" % (lg["slug"], sp, lg["slug"]))
+            redir.append("/football/%s/* /%s/%s/:splat 301"
+                         % (lg["slug"], sp, lg["slug"]))
+    write_file("_redirects", "\n".join(redir) + "\n")
+
     write_file("robots.txt",
                "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % BASE_URL)
 
