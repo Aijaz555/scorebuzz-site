@@ -1858,7 +1858,7 @@ s.src='https://site.web.api.espn.com/apis/site/v2/sports/'+meta.sport+'/'+meta.l
 s.onerror=function(){var s2=document.createElement('script');
 s2.src='https://site.api.espn.com/apis/site/v2/sports/'+meta.sport+'/'+meta.league+
 '/summary?event='+meta.event+'&callback=sbzUpdate';document.head.appendChild(s2);};
-document.head.appendChild(s);setTimeout(poll,30000);})();}
+document.head.appendChild(s);setTimeout(poll,15000);})();}
 })();
 </script>""".replace("%%PLAYS%%", data_json).replace("%%META%%", meta_json)
     return ("""<h2>Live Game View</h2><div class="card">
@@ -1910,7 +1910,7 @@ var l=plays[n-1];
 if(l){if(l.hs!=null&&l.as!=null)sEl.textContent=meta.hab+' '+l.hs+' - '+l.as+' '+meta.aab;
 cEl.textContent=((l.q?('Q'+l.q+' '):'')+(l.clock||'')).trim();}}
 render();
-if(meta.state==='in'){
+if(meta.state==='in'||meta.state==='pre'){
 window.sbzCastUpdate=function(d){var seen={},added=0;
 plays.forEach(function(p){seen[p.clock+'|'+p.text]=1;});
 function push(q,clock,text,scoring,hs,as){var k=clock+'|'+text;
@@ -1923,6 +1923,8 @@ push((p.period||{}).number||'',(p.clock||{}).displayValue||'',p.text||'',p.scori
 push((p.period||{}).number||'',(p.clock||{}).displayValue||'',p.text||p.description||'',true,p.homeScore,p.awayScore);});
 (d.keyEvents||[]).forEach(function(p){if(p.text)
 push((p.period||{}).number||'',((p.clock||{}).displayValue||''),p.text,!!p.scoringPlay,null,null);});
+(d.commentary||[]).forEach(function(c){if(c&&c.text){var t=c.time||{};
+push('',(t.displayValue||c.clock||''),c.text,false,null,null);}});
 }catch(e){}
 if(added)render();};
 (function poll(){var s=document.createElement('script');
@@ -1931,7 +1933,7 @@ s.src='https://site.web.api.espn.com/apis/site/v2/sports/'+meta.sport+'/'+meta.l
 s.onerror=function(){var s2=document.createElement('script');
 s2.src='https://site.api.espn.com/apis/site/v2/sports/'+meta.sport+'/'+meta.league+
 '/summary?event='+meta.event+'&callback=sbzCastUpdate';document.head.appendChild(s2);};
-document.head.appendChild(s);setTimeout(poll,30000);})();}
+document.head.appendChild(s);setTimeout(poll,15000);})();}
 })();
 </script>""".replace("%%CAST%%", data_json).replace("%%META%%", meta_json)
     return ("""<h2>Live Gamecast</h2><div class="card">
@@ -2002,9 +2004,8 @@ def build_match(m, summ):
             if cplays:
                 parts.append(cast_widget_html(m, cplays))
                 widget_done = True
-    if not widget_done and m["state"] == "in":
-        parts.append('<div class="card"><p class="meta">The live game view '
-                     'will appear here shortly.</p></div>')
+    if not widget_done and m["state"] in ("in", "pre"):
+        parts.append(cast_widget_html(m, []))
     if summ:
         tl = timeline_html(summ.get("commentary"), m["home"]["id"], m["away"]["id"],
                            m["home"].get("short") or m["home"]["name"],
