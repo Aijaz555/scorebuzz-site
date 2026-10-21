@@ -1269,18 +1269,22 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
         body.append("</section>")
     if recent:
         body.append('<section class="fsec"><h2>Recent Results</h2>')
-        for d, by_league in _group_by_day(recent):
+        lgmap = {l["slug"]: l["name"] for l in sport_leagues}
+        day_groups = _group_by_day(recent)
+        ordered_days = [g for g in reversed(day_groups) if g[0] is not None] + \
+                       [g for g in day_groups if g[0] is None]
+        for d, by_league in ordered_days:
+            day_ms = sorted(
+                (mm for ms in by_league.values() for mm in ms),
+                key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True)
             body.append('<div class="dayblock" data-day="%s">'
                         '<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
                         % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
-            for slug in sorted(by_league):
-                ms = sorted(by_league[slug],
-                            key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
-                            reverse=True)
-                lg = next((l for l in sport_leagues if l["slug"] == slug), None)
-                body.append(_lgroup(slug, lg["name"] if lg else slug,
-                                    "".join(match_row(m) for m in ms),
-                                    "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
+            body.append('<div class="card">')
+            body += [match_row(m, lgmap.get(m["league"]["slug"], ""))
+                     for m in day_ms]
+            body.append("</div>")
             body.append("</div>")
         body.append("</section>")
     body.insert(1, _datestrip_html())
@@ -1420,24 +1424,25 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
         body.append("</section>")
     if recent:
         body.append('<section class="fsec"><h2>Recent Results</h2>')
-        for sport in sorted(by_sport(recent),
-                            key=lambda s: (0 if s == "football" else 1, s)):
-            ms = by_sport(recent)[sport]
-            body.append('<div class="sportblock"><div class="sport-h">%s <span class="cnt">%d %s</span></div>'
-                        % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
-                           "match" if len(ms) == 1 else "matches"))
-            for d, by_league in _group_by_day(ms):
-                body.append('<div class="dayblock" data-day="%s">'
-                            '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
-                            % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
-                for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
-                    lms = sorted(by_league[slug],
-                                 key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
-                                 reverse=True)
-                    body.append(_lgroup(slug, lg_name.get(slug, slug),
-                                        "".join(match_row(m) for m in lms),
-                                        "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
-                body.append("</div>")
+        rec_sorted = sorted(
+            recent,
+            key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True)
+        day_groups = _group_by_day(rec_sorted)
+        ordered_days = [g for g in reversed(day_groups) if g[0] is not None] + \
+                       [g for g in day_groups if g[0] is None]
+        for d, by_league in ordered_days:
+            day_ms = sorted(
+                (mm for ms in by_league.values() for mm in ms),
+                key=lambda m: m["date"] or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True)
+            body.append('<div class="dayblock" data-day="%s">'
+                        '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                        % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
+            body.append('<div class="card">')
+            body += [match_row(m, lg_name.get(m["league"]["slug"], ""))
+                     for m in day_ms]
+            body.append("</div>")
             body.append("</div>")
         body.append("</section>")
     body.append('<div class="fhide"><h2>Leagues</h2><div class="card">')
