@@ -1253,20 +1253,23 @@ def _motd_html(m, lg_name):
     badge = ('<span class="badge live">\u25cf LIVE</span>' if live
              else '<span class="badge">%s</span>' % esc(_day_label(m["date"].date(), today_utc())
                                                        if m.get("date") else ""))
-    return ("""<div class='card motd' id='motd'><div class='motd-tag'>\u2605 Match of the Day %s</div>
+    return ("""<div class='card motd' id='motd'><a class='motd-cover' href='%s' aria-label='Open match page'></a><div class='motd-tag'>\u2605 Match of the Day %s</div>
 <div class='motd-teams'>
 <a href='%s' class='motd-team'>%s<span>%s</span></a>
 <div class='motd-mid'>%s</div>
 <a href='%s' class='motd-team'>%s<span>%s</span></a>
 </div>
 <div class='motd-lg'><a href='/football/%s/'>%s</a></div></div>"""
-            % (badge, match_path(m), team_img(m["home"], 64), esc(m["home"]["name"]),
+            % (match_path(m), badge, match_path(m), team_img(m["home"], 64), esc(m["home"]["name"]),
                mid, match_path(m), team_img(m["away"], 64), esc(m["away"]["name"]),
                lg["slug"], esc(lg_name.get(lg["slug"], lg["name"]))))
 
 
 _MOTD_CSS = """
-.motd{padding:18px;text-align:center}
+.motd{padding:18px;text-align:center;position:relative;transition:box-shadow .15s,border-color .15s}
+.motd:hover{border-color:var(--grn);box-shadow:0 3px 16px rgba(14,81,54,.20)}
+.motd-cover{position:absolute;inset:0;z-index:1;border-radius:inherit;cursor:pointer}
+.motd-lg{position:relative;z-index:2}
 .motd-tag{font-size:12px;font-weight:700;color:#b8860b;letter-spacing:.4px;margin-bottom:10px}
 .motd-teams{display:flex;align-items:center;justify-content:center;gap:18px}
 .motd-team{display:flex;flex-direction:column;align-items:center;gap:8px;color:inherit;
