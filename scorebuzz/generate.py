@@ -733,6 +733,7 @@ border-radius:4px;padding:0 5px;margin-left:5px;color:var(--amber);background:#f
 .datestrip a{padding:7px 15px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--txt);font-size:13px;font-weight:600}
 .datestrip a:hover{border-color:var(--grn);text-decoration:none}
 .datestrip a.live{color:var(--red);border-color:#f0b8b3}
+.datestrip a.on{background:var(--grn);color:#fff;border-color:var(--grn)}
 """
 
 SPORTS_NAV = ["Football", "American Football", "Basketball", "Ice Hockey",
@@ -879,6 +880,20 @@ by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);})
 }
 setTimeout(refresh,3000);setInterval(refresh,15000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
+var strip=document.querySelector('.datestrip');
+if(strip){
+function applyF(f,day,isToday,a){
+strip.querySelectorAll('a').forEach(function(x){x.classList.toggle('on',x===a);});
+var lc=document.getElementById('live');if(lc)lc.style.display=(f==='all'||f==='live'||(f==='day'&&isToday))?'':'none';
+var nl=document.getElementById('nolive');if(nl)nl.style.display=(f==='all'||f==='live')?'':'none';
+var md=document.getElementById('motd');if(md)md.style.display=(f==='all'||(f==='day'&&isToday))?'':'none';
+document.querySelectorAll('.fhide').forEach(function(el){el.style.display=(f==='all')?'':'none';});
+document.querySelectorAll('.dayblock').forEach(function(b){b.style.display=(f==='all'||(f==='day'&&b.getAttribute('data-day')===day))?'':'none';});
+document.querySelectorAll('.sportblock').forEach(function(s){if(f==='all'){s.style.display='';return;}var any=false;s.querySelectorAll('.dayblock').forEach(function(b){if(b.style.display!=='none')any=true;});s.style.display=any?'':'none';});
+document.querySelectorAll('.fsec').forEach(function(s){if(f==='all'){s.style.display='';return;}if(f==='live'){s.style.display='none';return;}var any=false;s.querySelectorAll('.dayblock').forEach(function(b){if(b.style.display!=='none')any=true;});s.style.display=any?'':'none';});
+}
+strip.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(ev){ev.preventDefault();applyF(a.getAttribute('data-f'),a.getAttribute('data-day'),a.getAttribute('data-today')==='1',a);});});
+}
 })();
 </script>
 </body>
@@ -1117,10 +1132,13 @@ def _lgroup(slug, name, rows_html, cnt_text=""):
 
 def _datestrip_html():
     t = today_utc()
-    chips = ['<a class="live" href="#live">&#9679; Live</a>']
+    chips = ['<a href="#" data-f="all" class="on">All</a>',
+             '<a class="live" href="#" data-f="live">&#9679; Live</a>']
     for delta, label in ((-1, "Yesterday"), (0, "Today"), (1, "Tomorrow")):
         d = t + timedelta(days=delta)
-        chips.append('<a href="#day-%s">%s</a>' % (d.isoformat(), label))
+        chips.append('<a href="#" data-f="day" data-day="%s"%s>%s</a>'
+                     % (d.isoformat(),
+                        ' data-today="1"' if delta == 0 else "", label))
     return '<div class="datestrip">%s</div>' % "".join(chips)
 
 
@@ -1144,17 +1162,21 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
                     % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
+    else:
+        body.append('<div class="card" id="nolive"><span class="badge">No live matches right now</span>'
+                    '<p class="meta">Live scores appear here the moment games kick off.</p></div>')
     if sport_leagues:
-        body.append("<h2>Leagues</h2><div class='card'>")
+        body.append('<div class="fhide"><h2>Leagues</h2><div class="card">')
         for lg in sport_leagues:
             body.append('<p><a href="/football/%s/">%s</a> '
                         '<span class="meta">\u2014 fixtures, results, standings</span></p>'
                         % (lg["slug"], esc(lg["name"])))
-        body.append("</div>")
+        body.append("</div></div>")
     if upcoming:
-        body.append("<h2>Upcoming Fixtures</h2>")
+        body.append('<section class="fsec"><h2>Upcoming Fixtures</h2>')
         for d, by_league in _group_by_day(upcoming):
-            body.append('<h3 id="day-%s" style="font-size:14px;margin:10px 0 4px">%s</h3>'
+            body.append('<div class="dayblock" data-day="%s">'
+                        '<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
                         % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
             for slug in sorted(by_league):
                 ms = sorted(by_league[slug],
@@ -1163,10 +1185,13 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
                 body.append(_lgroup(slug, lg["name"] if lg else slug,
                                     "".join(match_row(m) for m in ms),
                                     "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
+            body.append("</div>")
+        body.append("</section>")
     if recent:
-        body.append("<h2>Recent Results</h2>")
+        body.append('<section class="fsec"><h2>Recent Results</h2>')
         for d, by_league in _group_by_day(recent):
-            body.append('<h3 id="day-%s" style="font-size:14px;margin:10px 0 4px">%s</h3>'
+            body.append('<div class="dayblock" data-day="%s">'
+                        '<h3 style="font-size:14px;margin:10px 0 4px">%s</h3>'
                         % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
             for slug in sorted(by_league):
                 ms = sorted(by_league[slug],
@@ -1176,6 +1201,8 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
                 body.append(_lgroup(slug, lg["name"] if lg else slug,
                                     "".join(match_row(m) for m in ms),
                                     "%d %s" % (len(ms), "match" if len(ms) == 1 else "matches")))
+            body.append("</div>")
+        body.append("</section>")
     body.insert(1, _datestrip_html())
     return page("%s Scores, Fixtures & Results | ScoreBuzz" % sport_label,
                 "Live %s scores, upcoming fixtures, results, lineups and stats on ScoreBuzz."
@@ -1226,7 +1253,7 @@ def _motd_html(m, lg_name):
     badge = ('<span class="badge live">\u25cf LIVE</span>' if live
              else '<span class="badge">%s</span>' % esc(_day_label(m["date"].date(), today_utc())
                                                        if m.get("date") else ""))
-    return ("""<div class='card motd'><div class='motd-tag'>\u2605 Match of the Day %s</div>
+    return ("""<div class='card motd' id='motd'><div class='motd-tag'>\u2605 Match of the Day %s</div>
 <div class='motd-teams'>
 <a href='%s' class='motd-team'>%s<span>%s</span></a>
 <div class='motd-mid'>%s</div>
@@ -1280,7 +1307,7 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
         body += [match_row(m) for m in live]
         body.append("</div>")
     else:
-        body.append('<div class="card"><span class="badge">No live matches right now</span>'
+        body.append('<div class="card" id="nolive"><span class="badge">No live matches right now</span>'
                     '<p class="meta">Live scores appear here the moment games kick off. '
                     "Browse upcoming fixtures below.</p></div>")
 
@@ -1291,15 +1318,16 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
         return out
 
     if upcoming:
-        body.append("<h2>Upcoming Fixtures</h2>")
+        body.append('<section class="fsec"><h2>Upcoming Fixtures</h2>')
         for sport in sorted(by_sport(upcoming),
                             key=lambda s: (0 if s == "football" else 1, s)):
             ms = by_sport(upcoming)[sport]
-            body.append('<div class="sport-h">%s <span class="cnt">%d %s</span></div>'
+            body.append('<div class="sportblock"><div class="sport-h">%s <span class="cnt">%d %s</span></div>'
                         % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
                            "match" if len(ms) == 1 else "matches"))
             for d, by_league in _group_by_day(ms):
-                body.append('<h3 id="day-%s" style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                body.append('<div class="dayblock" data-day="%s">'
+                            '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
                             % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
                 for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
                     lms = sorted(by_league[slug],
@@ -1307,16 +1335,20 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
                     body.append(_lgroup(slug, lg_name.get(slug, slug),
                                         "".join(match_row(m) for m in lms),
                                         "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
+                body.append("</div>")
+            body.append("</div>")
+        body.append("</section>")
     if recent:
-        body.append("<h2>Recent Results</h2>")
+        body.append('<section class="fsec"><h2>Recent Results</h2>')
         for sport in sorted(by_sport(recent),
                             key=lambda s: (0 if s == "football" else 1, s)):
             ms = by_sport(recent)[sport]
-            body.append('<div class="sport-h">%s <span class="cnt">%d %s</span></div>'
+            body.append('<div class="sportblock"><div class="sport-h">%s <span class="cnt">%d %s</span></div>'
                         % (esc(_SPORT_LABEL.get(sport, sport.title())), len(ms),
                            "match" if len(ms) == 1 else "matches"))
             for d, by_league in _group_by_day(ms):
-                body.append('<h3 id="day-%s" style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                body.append('<div class="dayblock" data-day="%s">'
+                            '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
                             % (d.isoformat() if d else "tbc", esc(_day_label(d, today))))
                 for slug in sorted(by_league, key=lambda s: lg_name.get(s, s)):
                     lms = sorted(by_league[slug],
@@ -1325,12 +1357,15 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
                     body.append(_lgroup(slug, lg_name.get(slug, slug),
                                         "".join(match_row(m) for m in lms),
                                         "%d %s" % (len(lms), "match" if len(lms) == 1 else "matches")))
-    body.append("<h2>Leagues</h2><div class='card'>")
+                body.append("</div>")
+            body.append("</div>")
+        body.append("</section>")
+    body.append('<div class="fhide"><h2>Leagues</h2><div class="card">')
     for lg in leagues:
         body.append('<p><a href="/football/%s/">%s</a> '
                     '<span class="meta">\u2014 fixtures, results, standings</span></p>'
                     % (lg["slug"], esc(lg["name"])))
-    body.append("</div>")
+    body.append("</div></div>")
     return page("Live Football Scores, Fixtures & Results | ScoreBuzz",
                 "ScoreBuzz: live scores, upcoming fixtures, results, lineups, "
                 "stats and standings across football, NFL, NBA, NHL, MLB, tennis and MMA.",
