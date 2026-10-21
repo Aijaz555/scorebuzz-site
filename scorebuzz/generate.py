@@ -1997,6 +1997,13 @@ def _scorer_name(txt, team_name):
     if i >= 0:
         rest = txt[i + len("own goal by "):]
         return _surname(re.split(r"[,.(]", rest)[0].strip())
+    # ESPN goal text: "Goal! Home 1, Away 0. <Scorer> (<Team>) <shot>..."
+    # (the parenthesised team is often a short form, e.g. "(Viking)" for
+    # "Viking FK", so match the name pattern, not the exact team name)
+    mm = re.search(r"\.\s+([A-Z][\wÀ-ÿ'’.-]+(?: [A-Z][\wÀ-ÿ'’.-]+){0,2}) \(",
+                   txt or "")
+    if mm:
+        return _surname(mm.group(1))
     if team_name:
         mm = re.search(r"([A-Z][\wÀ-ÿ'’.-]+(?: [A-Z][\wÀ-ÿ'’.-]+){0,2}) \("""
                        + re.escape(team_name) + r"\)", txt or "")
