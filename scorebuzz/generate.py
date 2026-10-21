@@ -14,6 +14,7 @@ Usage: python3 generate.py
 """
 import json
 import shutil
+import base64
 import os
 import re
 import sys
@@ -621,6 +622,7 @@ h1{font-size:25px;margin:20px 0 12px}h2{font-size:19px;margin:24px 0 10px;
 border-bottom:2px solid var(--line);padding-bottom:6px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px rgba(21,34,47,.05)}
 .mrow{display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid var(--line);border-radius:6px}
+.tlg{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#e4eae5;color:#0e5136;font-weight:700;flex:none;vertical-align:middle}
 .mrow:hover{background:#f4f8fd}
 .mrow:last-child{border-bottom:0}
 .mrow .st{font-size:12px;color:var(--mut);width:86px;flex-shrink:0;font-weight:600}
@@ -659,10 +661,25 @@ footer{border-top:1px solid var(--line);margin-top:36px;padding:20px 14px;color:
 footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .kv{display:flex;gap:8px;font-size:14px;padding:5px 0;border-bottom:1px solid var(--line)}
 .kv b{min-width:130px;color:var(--mut);font-weight:600}
-.scoreboard-hero{text-align:center;padding:18px 10px}
-.scoreboard-hero .big{font-size:40px;font-weight:800;letter-spacing:1px}
-.scoreboard-hero .nm{font-size:17px;font-weight:600}
-.scoreboard-hero img{width:52px;height:52px}
+.scoreboard-hero{text-align:center;padding:16px 12px}
+.hero-comp{font-size:14px;font-weight:700}
+.hero-comp a{color:inherit}
+.hero-meta{color:var(--mut);font-size:12.5px;margin-top:3px}
+.hero-row{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px}
+.hero-team{flex:1;display:flex;align-items:center;gap:10px;min-width:0;color:inherit}
+.hero-team:hover{text-decoration:none}
+.ht-home{justify-content:flex-end;text-align:right}
+.ht-away{justify-content:flex-start;text-align:left}
+.hero-team .nm{font-size:17px;font-weight:700}
+.hero-mid{flex:none;min-width:112px}
+.scoreboard-hero .big{font-size:34px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
+.hero-status{margin-top:3px}
+.scorers{display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
+.sc-side{flex:1;line-height:1.6;min-width:0}
+.sc-home{text-align:right}
+.sc-away{text-align:left}
+.sc-ball{flex:none;color:var(--mut)}
+@media(max-width:560px){.hero-team .nm{font-size:13.5px}.hero-mid{min-width:86px}.scoreboard-hero .big{font-size:25px}}
 .vs{display:inline-block;margin:0 14px;color:var(--mut);font-size:15px;vertical-align:middle}
 .upd{color:var(--mut);font-size:12px;margin-top:14px}
 .trend{margin:14px 0 6px;overflow-x:auto;padding-bottom:8px}
@@ -808,6 +825,7 @@ def page(title, desc, path, crumbs, body_html, extra_jsonld=None, layout=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>%s</title>
 <meta name="description" content="%s">
 <link rel="canonical" href="%s">
@@ -925,6 +943,18 @@ strip.querySelectorAll('a').forEach(function(a){a.addEventListener('click',funct
 
 CHANGED_URLS = []  # pages whose HTML actually changed this build (for IndexNow)
 
+FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b3f2a"/><stop offset="1" stop-color="#178a4c"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)"/><text x="32" y="42" font-family="Arial,Helvetica,sans-serif" font-size="27" font-weight="700" fill="#ffffff" text-anchor="middle">SB</text></svg>'
+FAVICON32_B64 = "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"
+FAVICON180_B64 = "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"
+
+
+def write_binary(rel_path, data):
+    full = os.path.join(OUT_DIR, rel_path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as f:
+        f.write(data)
+
+
 def write_file(rel_path, content):
     full = os.path.join(OUT_DIR, rel_path.lstrip("/"))
     os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -940,11 +970,22 @@ def write_file(rel_path, content):
     return "/" + rel_path.lstrip("/")
 
 
+def _initials(name):
+    words = [w for w in re.split(r"[^A-Za-z]+", name or "") if w]
+    if not words:
+        return "?"
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][0] + words[1][0]).upper()
+
+
 def team_img(t, size=20):
     if t.get("logo"):
         return ('<img src="%s" alt="%s logo" width="%d" height="%d" loading="lazy">'
                 % (esc(t["logo"]), esc(t["short"] or t["name"]), size, size))
-    return ""
+    return ('<span class="tlg" style="width:%dpx;height:%dpx;font-size:%dpx">%s</span>'
+            % (size, size, max(8, int(size * 0.4)),
+               esc(_initials(t.get("name") or t.get("short") or "?"))))
 
 
 def _live_attrs(m):
@@ -1117,10 +1158,12 @@ def _mini_row(m):
         tag = '<span class="ml">LIVE</span>'
     else:
         tag = '<span class="ml mut">%s</span>' % esc(status_label(m))
-    return ('<a class="mini" href="%s">%s<span class="mt">%s v %s</span>'
+    return ('<a class="mini" href="%s">%s<span class="mt">%s %s v %s %s</span>'
             '<span class="ms">%s</span></a>'
             % (match_path(m), tag,
+               team_img(m["home"], 16),
                esc(m["home"]["short"] or m["home"]["name"]),
+               team_img(m["away"], 16),
                esc(m["away"]["short"] or m["away"]["name"]), sc))
 
 
@@ -1943,6 +1986,71 @@ document.head.appendChild(s);setTimeout(poll,15000);})();}
 %s""" % (esc(hab), esc(aab), js))
 
 
+def _surname(name):
+    parts = (name or "").split()
+    return parts[-1] if parts else (name or "")
+
+
+def _scorer_name(txt, team_name):
+    low = (txt or "").lower()
+    i = low.find("own goal by ")
+    if i >= 0:
+        rest = txt[i + len("own goal by "):]
+        return _surname(re.split(r"[,.(]", rest)[0].strip())
+    if team_name:
+        mm = re.search(r"([A-Z][\wÀ-ÿ'’.-]+(?: [A-Z][\wÀ-ÿ'’.-]+){0,2}) \("""
+                       + re.escape(team_name) + r"\)", txt or "")
+        if mm:
+            return _surname(mm.group(1))
+    return ""
+
+
+def _scorers_html(m, summ):
+    """FotMob-style goalscorer lines under the hero score (soccer only).
+    Built only from real key events in the summary — never invented."""
+    if not summ or (m["league"].get("sport") != "soccer"):
+        return ""
+    home_id, away_id = str(m["home"].get("id")), str(m["away"].get("id"))
+    per = {"home": {}, "away": {}}
+    order = {"home": [], "away": []}
+    for c in summ.get("commentary") or []:
+        if _event_kind(c) != "goal":
+            continue
+        minute = _event_minute(c)
+        if minute is None:
+            continue
+        tid = c.get("team_id") or ""
+        side = "home" if tid == home_id else ("away" if tid == away_id else None)
+        if not side:
+            continue
+        name = _scorer_name(c.get("text") or "", c.get("team_name") or "")
+        if not name:
+            continue
+        txt = (c.get("text") or "").lower()
+        tag = ""
+        if "own goal" in txt:
+            tag = " (OG)"
+        elif "penalt" in (c.get("type") or "").lower() or "penalty" in txt:
+            tag = " (Pen)"
+        mtxt = (c.get("clock") or "").strip() or ("%d'" % int(round(minute)))
+        if name not in per[side]:
+            per[side][name] = []
+            order[side].append(name)
+        per[side][name].append((minute, mtxt + tag))
+    if not order["home"] and not order["away"]:
+        return ""
+    def fmt(side):
+        lines = []
+        for name in order[side]:
+            mins = ", ".join(t for _, t in sorted(per[side][name]))
+            lines.append("%s <b>%s</b>" % (esc(name), esc(mins)))
+        return "<br>".join(lines)
+    return ("<div class='scorers'><div class='sc-side sc-home'>%s</div>"
+            "<div class='sc-ball'>\u26bd</div>"
+            "<div class='sc-side sc-away'>%s</div></div>"
+            % (fmt("home"), fmt("away")))
+
+
 def build_match(m, summ):
     lg, path = m["league"], match_path(m)
     hs, aws = m["home"].get("score"), m["away"].get("score")
@@ -1970,24 +2078,35 @@ def build_match(m, summ):
     badge = ('<span class="badge live js-st">● %s</span>'
              % esc(status_label(m))) if m["state"] == "in" else \
             ('<span class="badge js-st">%s</span>' % esc(status_label(m)))
+    when = ""
+    if m["date"]:
+        when = "%s, %s" % (fmt_date(m["date"]), fmt_time(m["date"]))
+    venue_line = ""
+    if m["venue"]:
+        venue_line = m["venue"] + (" \u2014 " + m["city"] if m["city"] else "")
+    elif m["city"]:
+        venue_line = m["city"]
+    meta_line = " \u00b7 ".join(b for b in (when, venue_line) if b)
     hero = (
-        "<div class='card scoreboard-hero'%s>%s"
-        "<div><span class='nm'>%s %s</span><br>"
-        "<span class='meta'>%s</span></div>"
-        "<div class='big js-big'>%s %s %s</div>"
-        "<div><span class='nm'>%s %s</span><br>"
-        "<span class='meta'>%s</span></div>"
-        "<p class='meta'>%s%s%s</p></div>"
-        % (_live_attrs(m), badge,
-           team_img(m["home"], 52), esc(m["home"]["name"]),
-           esc(m["home"].get("record") or ""),
+        "<div class='card scoreboard-hero'%s>"
+        "<div class='hero-comp'><a href='%s'>%s</a></div>"
+        "<div class='hero-meta'>%s</div>"
+        "<div class='hero-row'>"
+        "<a class='hero-team ht-home' href='/team/%s/'><span class='nm'>%s</span>%s</a>"
+        "<div class='hero-mid'><div class='big js-big'>%s %s %s</div>"
+        "<div class='hero-status'>%s</div></div>"
+        "<a class='hero-team ht-away' href='/team/%s/'>%s<span class='nm'>%s</span></a>"
+        "</div>%s</div>"
+        % (_live_attrs(m),
+           league_path(lg), esc(lg["name"]),
+           esc(meta_line),
+           esc(team_slug(m["home"])), esc(m["home"]["name"]), team_img(m["home"], 46),
            esc(hs if hs is not None else ""),
            '<span class="vs">-</span>' if hs is not None else '<span class="vs">vs</span>',
            esc(aws if aws is not None else ""),
-           team_img(m["away"], 52), esc(m["away"]["name"]),
-           esc(m["away"].get("record") or ""),
-           esc(m["venue"]), " — " if m["venue"] and m["city"] else "",
-           esc(m["city"])))
+           badge,
+           esc(team_slug(m["away"])), team_img(m["away"], 46), esc(m["away"]["name"]),
+           _scorers_html(m, summ)))
     parts = [hero]
     widget_done = False
     if summ:
@@ -2186,7 +2305,8 @@ def cricket_match_row(cm):
         if img:
             return ('<img src="%s" alt="%s" width="20" height="20" loading="lazy">'
                     % (esc(img), esc(tname)))
-        return ""
+        return ('<span class="tlg" style="width:20px;height:20px;font-size:9px">%s</span>'
+                % esc(_initials(tname)))
 
     teams_html = ('<div class="tn">%s%s</div><div class="tn">%s%s</div>'
                   % (logo(cm["team1"]), esc(cm["team1"] or "?"),
@@ -2689,7 +2809,8 @@ def build_cricket_match(cm):
         if img:
             return '<img src="%s" alt="%s" width="%d" height="%d" loading="lazy">' % (
                 esc(img), esc(tname), size, size)
-        return ""
+        return ('<span class="tlg" style="width:%dpx;height:%dpx;font-size:%dpx">%s</span>'
+                % (size, size, max(10, int(size * 0.4)), esc(_initials(tname))))
 
     badge = ('<span class="badge js-st live">● LIVE</span>' if state == "live"
              else '<span class="badge js-st">%s</span>' % esc(cm["status"] or state.title()))
@@ -3171,6 +3292,9 @@ def main():
                          % (lg["slug"], sp, lg["slug"]))
     write_file("_redirects", "\n".join(redir) + "\n")
 
+    write_file("favicon.svg", FAVICON_SVG)
+    write_binary("favicon-32.png", base64.b64decode(FAVICON32_B64))
+    write_binary("apple-touch-icon.png", base64.b64decode(FAVICON180_B64))
     write_file("robots.txt",
                "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % BASE_URL)
 
