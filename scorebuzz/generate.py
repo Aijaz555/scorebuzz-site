@@ -2156,15 +2156,32 @@ TRACKER_SPOTS = {
 
 def tracker_widget_html(m):
     slug = TRACKER_SPOTS.get(str(m.get("id")))
-    if not slug:
+    if not slug or not m.get("date"):
         return ""
-    return ("<h2>Live Match Tracker</h2><div class=\"card\" style=\"padding:8px\">"
-            "<iframe src=\"https://sportscore.com/embed/tracker/football/" + slug + "/?theme=light\" "
-            "style=\"width:100%;height:430px;border:0;border-radius:8px;display:block\" "
-            "loading=\"lazy\" title=\"Live match tracker\"></iframe>"
-            "<div style=\"text-align:right;font-size:12px;color:#5b6b7a;padding-top:6px\">"
-            "Powered by <a href=\"https://sportscore.com/\" rel=\"dofollow\">SportScore</a>"
-            "</div></div>")
+    iso = m["date"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    pkt = (m["date"] + timedelta(hours=5)).strftime("%H:%M")
+    src = ("https://sportscore.com/embed/tracker/football/" + slug
+           + "/?theme=light")
+    js = ("(function(){var K=Date.parse('" + iso + "'),n=Date.now(),"
+          "c=document.getElementById('sst" + str(m.get("id")) + "');"
+          "if(!c)return;var f=c.querySelector('iframe'),"
+          "p=c.querySelector('.sst-pre');"
+          "if(n>K+10800000){c.style.display='none';return;}"
+          "if(n>=K-900000){f.src=f.getAttribute('data-src');"
+          "f.style.display='block';p.style.display='none';}})();")
+    return ("<h2>Live Match Tracker</h2>"
+            "<div class=\"card\" id=\"sst" + str(m.get("id"))
+            + "\" style=\"padding:8px\">"
+            "<div class=\"sst-pre\" style=\"padding:26px 12px;"
+            "text-align:center;color:#5b6b7a\">The live match tracker "
+            "appears here at kickoff (" + pkt + " PKT).</div>"
+            "<iframe data-src=\"" + src + "\" style=\"width:100%;"
+            "height:430px;border:0;border-radius:8px;display:none\" "
+            "title=\"Live match tracker\"></iframe>"
+            "<div style=\"text-align:right;font-size:12px;color:#5b6b7a;"
+            "padding-top:6px\">Powered by "
+            "<a href=\"https://sportscore.com/\" rel=\"dofollow\">SportScore</a>"
+            "</div><script>" + js + "</script></div>")
 
 
 def build_match(m, summ):
