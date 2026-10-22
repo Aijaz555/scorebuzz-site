@@ -2146,6 +2146,27 @@ def _scorers_html(m, summ):
             % (fmt("home"), fmt("away")))
 
 
+# SportScore live tracker embeds, keyed by ESPN event id -> SportScore fixture
+# slug. Free-tier terms: the "Powered by SportScore" attribution must stay
+# visible on pages that carry the tracker.
+TRACKER_SPOTS = {
+    "401892156": "perth-glory-vs-brisbane-roar",  # Brisbane Roar v Perth Glory, A-League, 2026-10-23
+}
+
+
+def tracker_widget_html(m):
+    slug = TRACKER_SPOTS.get(str(m.get("id")))
+    if not slug:
+        return ""
+    return ("<h2>Live Match Tracker</h2><div class=\"card\" style=\"padding:8px\">"
+            "<iframe src=\"https://sportscore.com/embed/tracker/football/" + slug + "/?theme=light\" "
+            "style=\"width:100%;height:430px;border:0;border-radius:8px;display:block\" "
+            "loading=\"lazy\" title=\"Live match tracker\"></iframe>"
+            "<div style=\"text-align:right;font-size:12px;color:#5b6b7a;padding-top:6px\">"
+            "Powered by <a href=\"https://sportscore.com/\" rel=\"dofollow\">SportScore</a>"
+            "</div></div>")
+
+
 def build_match(m, summ):
     lg, path = m["league"], match_path(m)
     hs, aws = m["home"].get("score"), m["away"].get("score")
@@ -2234,6 +2255,9 @@ def build_match(m, summ):
            esc(team_slug(m["away"])), team_img(m["away"], 46), esc(m["away"]["name"]),
            _scorers_html(m, summ)))
     parts = [hero]
+    tw = tracker_widget_html(m)
+    if tw:
+        parts.append(tw)
     widget_done = False
     if summ:
         if m["league"]["sport"] == "football" and summ.get("nfl_plays"):
