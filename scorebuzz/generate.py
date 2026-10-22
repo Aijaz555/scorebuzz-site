@@ -2150,7 +2150,7 @@ def _scorers_html(m, summ):
 # slug. Free-tier terms: the "Powered by SportScore" attribution must stay
 # visible on pages that carry the tracker.
 TRACKER_SPOTS = {
-    "401892156": "perth-glory-vs-brisbane-roar",  # Brisbane Roar v Perth Glory, A-League, 2026-10-23
+    "401877877": "atletico-nacional-vs-deportivo-pasto",  # Atletico Nacional v Deportivo Pasto, Primera A, 2026-10-23
 }
 
 
