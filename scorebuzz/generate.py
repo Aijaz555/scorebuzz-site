@@ -682,14 +682,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .cd-l{display:block;font-size:9px;letter-spacing:2px;color:#a9dfc0;margin-top:4px;font-weight:700}
 .cd-sep{font-size:22px;font-weight:800;color:#0e7a44;padding-top:7px;animation:cdblink 1s steps(1) infinite}
 .fl{position:relative;height:30px;perspective:280px}
-.fl-h{position:absolute;left:0;width:56px;height:15px;overflow:hidden}
+.fl-h{position:absolute;left:0;width:100%;height:15px;overflow:hidden}
 .fl-h i,.fl-f i{font-style:normal;display:block;height:30px;line-height:30px;font-size:25px;font-weight:800;text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.35)}
 .fl-t{top:0}
 .fl-b{top:15px}
 .fl-b i{transform:translateY(-15px)}
 .fl::after{content:'';position:absolute;top:15px;left:2px;right:2px;height:1px;background:rgba(0,0,0,.4);z-index:3}
-.fl-leaf{position:absolute;top:0;left:0;width:56px;height:15px;transform-origin:bottom;z-index:2}
-.fl-f{position:absolute;left:0;top:0;width:56px;height:15px;overflow:hidden;background:linear-gradient(180deg,#177a4e,#116540);border-radius:6px 6px 0 0;backface-visibility:hidden}
+.fl-leaf{position:absolute;top:0;left:0;width:100%;height:15px;transform-origin:bottom;z-index:2}
+.fl-f{position:absolute;left:0;top:0;width:100%;height:15px;overflow:hidden;background:linear-gradient(180deg,#177a4e,#116540);border-radius:6px 6px 0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .fl.go .fl-leaf{animation:flfold .48s ease-in forwards}
 @keyframes flfold{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
 @keyframes cdblink{0%,55%{opacity:1}56%,100%{opacity:.2}}
@@ -699,10 +699,19 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .wbtn .pulse{background:#fff}
 .rwbtn{flex:none;font-size:11.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#e8effc;color:var(--acc);white-space:nowrap}
 .rwbtn.live{background:#fdeceb;color:var(--red)}
-.cdmini{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#148352,#0b3524);color:#fff;font-weight:800;font-variant-numeric:tabular-nums;font-size:12.5px;padding:4px 11px;border-radius:999px;box-shadow:0 2px 7px rgba(8,40,24,.3);white-space:nowrap}
-.cd-dot{flex:none;width:6px;height:6px;border-radius:50%;background:#ffd34d;animation:cdblink 1s steps(1) infinite}
+.cdrow{display:flex;align-items:flex-start;justify-content:flex-end;gap:2px}
+.fu{background:linear-gradient(160deg,#148352,#0b3524);color:#fff;border-radius:7px;padding:3px 3px 2px;box-shadow:0 2px 6px rgba(8,40,24,.3)}
+.fu .fl{width:27px;height:20px;perspective:160px}
+.fu .fl-h{height:10px}
+.fu .fl-b{top:10px}
+.fu .fl-b i{transform:translateY(-10px)}
+.fu .fl-h i,.fu .fl-f i{height:20px;line-height:20px;font-size:15px;text-shadow:none}
+.fu .fl-leaf,.fu .fl-f{height:10px}
+.fu .fl-f{border-radius:4px 4px 0 0}
+.fu .fl::after{top:10px;left:1px;right:1px}
+.cdrow .cd-sep{font-size:13px;padding-top:3px;animation:cdblink 1s steps(1) infinite}
 @media(max-width:560px){.cd-u{min-width:47px}.cd-n{font-size:20px}
-.fl{height:26px}.fl-h,.fl-leaf,.fl-f{width:48px;height:13px}
+.fl{height:26px}.fl-h,.fl-leaf,.fl-f{height:13px}
 .fl-h i,.fl-f i{height:26px;line-height:26px;font-size:20px}
 .fl-b{top:13px}.fl-b i{transform:translateY(-13px)}.fl::after{top:13px}}
 .scorers{display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
@@ -930,7 +939,7 @@ if(big&&H&&A&&H.score!=null&&A.score!=null)big.textContent=H.score+' - '+A.score
 var cd=r.querySelector('.js-cd');var wb=r.querySelector('.js-wbtn');
 if(cd&&(st.state==='in'||st.state==='post')){cd.setAttribute('data-done','1');
 if(big){cd.style.display='none';big.style.display='';}
-else if(H&&A&&H.score!=null&&A.score!=null){cd.textContent=H.score+' - '+A.score;cd.classList.remove('cdmini');cd.style.display='';}
+else if(H&&A&&H.score!=null&&A.score!=null){cd.textContent=H.score+' - '+A.score;cd.classList.remove('cdrow');cd.style.display='';}
 else{cd.style.display='none';}}
 if(st.state==='in'){if(wb){wb.innerHTML='\u25cf LIVE';wb.classList.add('live');}}
 else if(st.state==='post'){if(wb)wb.style.display='none';}
@@ -1057,6 +1066,14 @@ def _live_attrs(m):
                "1" if lg.get("sport") == "soccer" else "0"))
 
 
+def _flap_mini(val, unit):
+    return ("<div class='fu'><div class='fl' data-u='%s'>"
+            "<div class='fl-h fl-t'><i>%02d</i></div>"
+            "<div class='fl-h fl-b'><i>%02d</i></div>"
+            "<div class='fl-leaf'><div class='fl-f'><i>%02d</i></div></div>"
+            "</div></div>" % (unit, val, val, val))
+
+
 def match_row(m, comp=None):
     live = m["state"] == "in"
     st = '<span class="st js-st%s">%s</span>' % (" live" if live else "",
@@ -1070,9 +1087,11 @@ def match_row(m, comp=None):
         _rem = max(0, int((m["date"] - datetime.now(timezone.utc)).total_seconds()))
         _hh, _rem = divmod(_rem, 3600)
         _mi, _ss = divmod(_rem, 60)
-        sc = ('<div class="sc cdmini js-cd" data-kickoff="%s">'
-              '<span class="cd-dot"></span><span class="js-cd-t">%02d:%02d:%02d</span></div>'
-              % (m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"), _hh, _mi, _ss))
+        sc = ('<div class="sc cdrow js-cd" data-kickoff="%s">'
+              % m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"))
+        sc += _flap_mini(_hh, "h") + '<span class="cd-sep">:</span>'
+        sc += _flap_mini(_mi, "m") + '<span class="cd-sep">:</span>'
+        sc += _flap_mini(_ss, "s") + '</div>'
     elif hs is None:
         sc = '<div class="sc">%s</div>' % esc(fmt_time(m["date"]))
     else:
