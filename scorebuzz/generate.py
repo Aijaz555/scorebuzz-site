@@ -681,6 +681,17 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .cd-n{display:block;font-size:25px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px rgba(0,0,0,.35)}
 .cd-l{display:block;font-size:9px;letter-spacing:2px;color:#a9dfc0;margin-top:4px;font-weight:700}
 .cd-sep{font-size:22px;font-weight:800;color:#0e7a44;padding-top:7px;animation:cdblink 1s steps(1) infinite}
+.fl{position:relative;height:30px;perspective:280px}
+.fl-h{position:absolute;left:0;width:56px;height:15px;overflow:hidden}
+.fl-h i,.fl-f i{font-style:normal;display:block;height:30px;line-height:30px;font-size:25px;font-weight:800;text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.35)}
+.fl-t{top:0}
+.fl-b{top:15px}
+.fl-b i{transform:translateY(-15px)}
+.fl::after{content:'';position:absolute;top:15px;left:2px;right:2px;height:1px;background:rgba(0,0,0,.4);z-index:3}
+.fl-leaf{position:absolute;top:0;left:0;width:56px;height:15px;transform-origin:bottom;z-index:2}
+.fl-f{position:absolute;left:0;top:0;width:56px;height:15px;overflow:hidden;background:linear-gradient(180deg,#177a4e,#116540);border-radius:6px 6px 0 0;backface-visibility:hidden}
+.fl.go .fl-leaf{animation:flfold .48s ease-in forwards}
+@keyframes flfold{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
 @keyframes cdblink{0%,55%{opacity:1}56%,100%{opacity:.2}}
 .wbtn{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:var(--acc);color:#fff;font-weight:700;font-size:13.5px;padding:8px 20px;border-radius:999px;box-shadow:0 2px 8px rgba(20,71,200,.3)}
 .wbtn:hover{text-decoration:none;filter:brightness(1.1)}
@@ -690,7 +701,10 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .rwbtn.live{background:#fdeceb;color:var(--red)}
 .cdmini{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#148352,#0b3524);color:#fff;font-weight:800;font-variant-numeric:tabular-nums;font-size:12.5px;padding:4px 11px;border-radius:999px;box-shadow:0 2px 7px rgba(8,40,24,.3);white-space:nowrap}
 .cd-dot{flex:none;width:6px;height:6px;border-radius:50%;background:#ffd34d;animation:cdblink 1s steps(1) infinite}
-@media(max-width:560px){.cd-u{min-width:47px}.cd-n{font-size:20px}}
+@media(max-width:560px){.cd-u{min-width:47px}.cd-n{font-size:20px}
+.fl{height:26px}.fl-h,.fl-leaf,.fl-f{width:48px;height:13px}
+.fl-h i,.fl-f i{height:26px;line-height:26px;font-size:20px}
+.fl-b{top:13px}.fl-b i{transform:translateY(-13px)}.fl::after{top:13px}}
 .scorers{display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
 .sc-side{flex:1;line-height:1.6;min-width:0}
 .sc-home{text-align:right}
@@ -942,8 +956,13 @@ by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);})
 }
 setTimeout(refresh,3000);setInterval(refresh,15000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
+function flipTo(fl,nv){if(!fl)return;var t=fl.querySelector('.fl-t i'),b=fl.querySelector('.fl-b i'),f=fl.querySelector('.fl-f i');var cur=f.textContent;if(cur===nv)return;
+if(fl._busy){t.textContent=nv;b.textContent=nv;f.textContent=nv;return;}
+fl._busy=1;t.textContent=nv;fl.classList.remove('go');void fl.offsetWidth;fl.classList.add('go');
+setTimeout(function(){b.textContent=nv;},240);
+setTimeout(function(){f.textContent=nv;fl.classList.remove('go');fl._busy=0;},500);}
 var cds=document.querySelectorAll('.js-cd');
-if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){if(cd.getAttribute('data-done')==='1')return;var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var eh=cd.querySelector('.js-cd-h');if(eh){var em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);}else{var tt=cd.querySelector('.js-cd-t');if(tt)tt.textContent=p(h)+':'+p(mi)+':'+p(se);else cd.textContent=p(h)+':'+p(mi)+':'+p(se);}});};tickCd();setInterval(tickCd,1000);}
+if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){if(cd.getAttribute('data-done')==='1')return;var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var fh=cd.querySelector('[data-u="h"]');if(fh){flipTo(fh,p(h));flipTo(cd.querySelector('[data-u="m"]'),p(mi));flipTo(cd.querySelector('[data-u="s"]'),p(se));}else{var eh=cd.querySelector('.js-cd-h');if(eh){var em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);}else{var tt=cd.querySelector('.js-cd-t');if(tt)tt.textContent=p(h)+':'+p(mi)+':'+p(se);else cd.textContent=p(h)+':'+p(mi)+':'+p(se);}}});};tickCd();setInterval(tickCd,1000);}
 var strip=document.querySelector('.datestrip');
 if(strip){
 function applyF(f,day,isToday,a){
@@ -2155,17 +2174,24 @@ def build_match(m, summ):
             rem = max(0, int((m["date"] - datetime.now(timezone.utc)).total_seconds()))
             hh, rem = divmod(rem, 3600)
             mi, ss = divmod(rem, 60)
+            def _fl(val, unit, label):
+                return ("<div class='cd-u'><div class='fl' data-u='%s'>"
+                        "<div class='fl-h fl-t'><i>%02d</i></div>"
+                        "<div class='fl-h fl-b'><i>%02d</i></div>"
+                        "<div class='fl-leaf'><div class='fl-f'><i>%02d</i></div></div>"
+                        "</div><span class='cd-l'>%s</span></div>"
+                        % (unit, val, val, val, label))
             mid_inner = (
                 "<div class='cd-cap'>Starts in</div>"
                 "<div class='cd js-cd' data-kickoff='%s'>"
-                "<div class='cd-u'><span class='cd-n js-cd-h'>%02d</span><span class='cd-l'>HRS</span></div>"
-                "<span class='cd-sep'>:</span>"
-                "<div class='cd-u'><span class='cd-n js-cd-m'>%02d</span><span class='cd-l'>MIN</span></div>"
-                "<span class='cd-sep'>:</span>"
-                "<div class='cd-u'><span class='cd-n js-cd-s'>%02d</span><span class='cd-l'>SEC</span></div>"
-                "</div>"
-                "<div class='big js-big' style='display:none'></div>"
-                % (m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"), hh, mi, ss))
+                % m["date"].strftime("%Y-%m-%dT%H:%M:%SZ"))
+            mid_inner += _fl(hh, "h", "HRS")
+            mid_inner += "<span class='cd-sep'>:</span>"
+            mid_inner += _fl(mi, "m", "MIN")
+            mid_inner += "<span class='cd-sep'>:</span>"
+            mid_inner += _fl(ss, "s", "SEC")
+            mid_inner += ("</div>"
+                          "<div class='big js-big' style='display:none'></div>")
     elif m["state"] == "in":
         action = ("<a class='wbtn live js-wbtn' href='#sbzWatch'>"
                   "<span class='pulse'></span>LIVE</a>")
