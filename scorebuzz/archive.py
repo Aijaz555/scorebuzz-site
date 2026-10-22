@@ -16,7 +16,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 ARCHIVE_KEEP_DAYS = 1825  # 5 years of match history (covers 2022 backfill)
-TEMPLATE_VERSION = 11  # bump when match page templates change (forces re-render)
+TEMPLATE_VERSION = 12  # bump when match page templates change (forces re-render)
 
 
 def _encode(o):

@@ -914,7 +914,8 @@ var rows=[].slice.call(document.querySelectorAll('[data-eid]'));
 if(!rows.length)return;
 function pc(s){if(!s)return null;s=String(s);var a=s.match(/(\d+):(\d+)/);if(a)return parseInt(a[1],10)*60+parseInt(a[2],10);var b=s.match(/(\d+)\s*'/);if(b)return parseInt(b[1],10)*60;return null;}
 rows.forEach(function(r){r._clk=pc(r.getAttribute('data-clock'));r._at=Date.now();r._state=r.getAttribute('data-state');});
-setInterval(function(){var now=Date.now();rows.forEach(function(r){
+var live0=false;setTimeout(function(){live0=true;},4000);
+setInterval(function(){if(!live0)return;var now=Date.now();rows.forEach(function(r){
 if(r._state!=='in'||r._clk==null||r.getAttribute('data-tick')!=='1')return;
 var adv=Math.floor((now-r._at)/1000);if(adv>75)adv=75;
 var mm=Math.floor((r._clk+adv)/60);var el=r.querySelector('.js-st');
@@ -960,18 +961,18 @@ Object.keys(by).forEach(function(k){
 fetch('/api/'+k+'/scoreboard').then(function(x){return x.json();}).then(function(d){
 var evs={};(d.events||[]).forEach(function(e){evs[String(e.id)]=e;});
 by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);});
-}).catch(function(){});
+}).catch(function(){}).then(function(){live0=true;});
 });
 }
-setTimeout(refresh,3000);setInterval(refresh,15000);
+refresh();setInterval(refresh,15000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
-function flipTo(fl,nv){if(!fl)return;var t=fl.querySelector('.fl-t i'),b=fl.querySelector('.fl-b i'),f=fl.querySelector('.fl-f i');var cur=f.textContent;if(cur===nv)return;
+function flipTo(fl,nv,inst){if(!fl)return;var t=fl.querySelector('.fl-t i'),b=fl.querySelector('.fl-b i'),f=fl.querySelector('.fl-f i');if(inst){t.textContent=nv;b.textContent=nv;f.textContent=nv;fl.classList.remove('go');fl._busy=0;return;}var cur=f.textContent;if(cur===nv)return;
 if(fl._busy){t.textContent=nv;b.textContent=nv;f.textContent=nv;return;}
 fl._busy=1;t.textContent=nv;fl.classList.remove('go');void fl.offsetWidth;fl.classList.add('go');
 setTimeout(function(){b.textContent=nv;},240);
 setTimeout(function(){f.textContent=nv;fl.classList.remove('go');fl._busy=0;},500);}
 var cds=document.querySelectorAll('.js-cd');
-if(cds.length){var tickCd=function(){var now=Date.now();cds.forEach(function(cd){if(cd.getAttribute('data-done')==='1')return;var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var fh=cd.querySelector('[data-u="h"]');if(fh){flipTo(fh,p(h));flipTo(cd.querySelector('[data-u="m"]'),p(mi));flipTo(cd.querySelector('[data-u="s"]'),p(se));}else{var eh=cd.querySelector('.js-cd-h');if(eh){var em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);}else{var tt=cd.querySelector('.js-cd-t');if(tt)tt.textContent=p(h)+':'+p(mi)+':'+p(se);else cd.textContent=p(h)+':'+p(mi)+':'+p(se);}}});};tickCd();setInterval(tickCd,1000);}
+if(cds.length){var cdInit=true;var tickCd=function(){var now=Date.now();cds.forEach(function(cd){if(cd.getAttribute('data-done')==='1')return;var t=Date.parse(cd.getAttribute('data-kickoff'));if(isNaN(t))return;var s=Math.max(0,Math.floor((t-now)/1000));var h=Math.floor(s/3600),mi=Math.floor((s-h*3600)/60),se=s-h*3600-mi*60;var p=function(n){return (n<10?'0':'')+n;};var fh=cd.querySelector('[data-u="h"]');if(fh){flipTo(fh,p(h),cdInit);flipTo(cd.querySelector('[data-u="m"]'),p(mi),cdInit);flipTo(cd.querySelector('[data-u="s"]'),p(se),cdInit);}else{var eh=cd.querySelector('.js-cd-h');if(eh){var em=cd.querySelector('.js-cd-m'),es=cd.querySelector('.js-cd-s');eh.textContent=p(h);if(em)em.textContent=p(mi);if(es)es.textContent=p(se);}else{var tt=cd.querySelector('.js-cd-t');if(tt)tt.textContent=p(h)+':'+p(mi)+':'+p(se);else cd.textContent=p(h)+':'+p(mi)+':'+p(se);}}});};tickCd();cdInit=false;setInterval(tickCd,1000);}
 var strip=document.querySelector('.datestrip');
 if(strip){
 function applyF(f,day,isToday,a){
