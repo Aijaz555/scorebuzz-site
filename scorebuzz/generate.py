@@ -2162,13 +2162,17 @@ def tracker_widget_html(m):
     pkt = (m["date"] + timedelta(hours=5)).strftime("%H:%M")
     src = ("https://sportscore.com/embed/tracker/football/" + slug
            + "/?theme=light")
-    js = ("(function(){var K=Date.parse('" + iso + "'),n=Date.now(),"
+    js = ("(function(){var K=Date.parse('" + iso + "'),"
           "c=document.getElementById('sst" + str(m.get("id")) + "');"
           "if(!c)return;var f=c.querySelector('iframe'),"
-          "p=c.querySelector('.sst-pre');"
+          "p=c.querySelector('.sst-pre'),done=false;"
+          "function chk(){var n=Date.now();"
           "if(n>K+10800000){c.style.display='none';return;}"
-          "if(n>=K-900000){f.src=f.getAttribute('data-src');"
-          "f.style.display='block';p.style.display='none';}})();")
+          "if(n>=K-900000&&!done){done=true;"
+          "f.src=f.getAttribute('data-src');"
+          "f.style.display='block';p.style.display='none';}}"
+          "chk();var t=setInterval(function(){chk();"
+          "if(done||Date.now()>K+10800000)clearInterval(t);},20000);})();")
     return ("<h2>Live Match Tracker</h2>"
             "<div class=\"card\" id=\"sst" + str(m.get("id"))
             + "\" style=\"padding:8px\">"
