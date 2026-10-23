@@ -799,7 +799,8 @@ border-radius:4px;padding:0 5px;margin-left:5px;color:var(--amber);background:#f
 .mini .ml{color:var(--red);font-weight:800;font-size:11px;white-space:nowrap}
 .mini .ml.mut{color:var(--mut)}
 @media(max-width:1100px){.rail{display:none}.layout{grid-template-columns:224px minmax(0,1fr)}}
-@media(max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}.side{position:static}.side .sidebox.scroll{display:none}}
+@media(max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}.layout .content{order:1}.layout .side{order:2;position:static}.side .sidebox.scroll{display:none}}
+@media(max-width:640px){.mrow{flex-wrap:wrap;row-gap:4px}.mrow .st{width:auto;flex:1 1 auto;font-size:11.5px;order:1}.mrow .fav-star{order:2}.mrow>a{flex:1 1 100%!important;order:3;flex-wrap:wrap;row-gap:4px}.mrow .teams{flex:1 1 100%}.mrow .rwbtn{margin-left:auto}}
 /* ---- league group blocks + date strip ---- */
 .lgroup{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:12px 0;overflow:hidden;box-shadow:0 1px 2px rgba(21,34,47,.05)}
 .lg-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#eef4ec;border-bottom:1px solid var(--line);font-weight:700;font-size:15px}
@@ -2151,6 +2152,10 @@ def _scorers_html(m, summ):
 # visible on pages that carry the tracker.
 TRACKER_SPOTS = {
     "401877877": "atletico-nacional-vs-deportivo-pasto",  # Atletico Nacional v Deportivo Pasto, Primera A, 2026-10-23
+    "401884761": "vfb-stuttgart-vs-borussia-monchengladbach",  # VfB Stuttgart v Borussia M'gladbach, Bundesliga, 2026-10-23 23:30 PKT
+    "401876428": "ogc-nice-vs-stade-brestois-29",  # Stade Brestois 29 v OGC Nice, Ligue 1, 2026-10-23 23:45 PKT
+    "401874957": "torino-vs-monza",  # Torino v Monza, Serie A, 2026-10-23 23:45 PKT
+    "401882836": "deportivo-alaves-vs-malaga",  # Deportivo Alaves v Malaga, La Liga, 2026-10-23 00:00 PKT (Oct 24)
 }
 
 
