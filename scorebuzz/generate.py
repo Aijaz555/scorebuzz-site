@@ -1580,6 +1580,10 @@ def build_league(league, events, standings, trend_html=""):
                                             "short": r["abbr"], "name": r["name"]}),
                                esc(r["name"]), tds))
             body.append("</table></div>")
+    if not live and not upcoming and not finished and not standings:
+        body.append('<div class="card"><p class="meta">No live matches, '
+                    'upcoming fixtures or results are available for this '
+                    'league right now — check back soon.</p></div>')
     path = league_path(league)
     crumbs = [("Home", "/"), (league["name"], path)]
     return page("%s Fixtures, Results, Live Scores & Standings | ScoreBuzz"
@@ -3383,6 +3387,16 @@ def main():
                                build_sport_page(sport, sslug, s_leagues, s_events)))
     urls.append(write_file("favourites/index.html", build_favourites()))
     urls.append(write_file("search/index.html", build_search_page()))
+    # Real 404 page (not added to urls/sitemap): without it, Pages serves
+    # the homepage for unknown paths, so a missing page looks like mixed
+    # all-league content instead of an error.
+    write_file("404.html", page(
+        "Page Not Found | ScoreBuzz",
+        "The page you are looking for does not exist on ScoreBuzz.",
+        "/404.html", [("Home", "/")],
+        "<h1>Page not found</h1><div class='card'><p class='meta'>"
+        "This page does not exist. Head back to the "
+        "<a href='/'>live scores</a>.</p></div>"))
 
     # client-side search index: teams + leagues (zero backend)
     search_index = {
@@ -3401,8 +3415,9 @@ def main():
 
     for lg in leagues:
         evs = arch_league_events.get(lg["slug"], [])
-        if not evs and not standings.get(lg["slug"]):
-            continue
+        # Every configured league gets its own page, even with no data
+        # yet — a missing page silently falls back to the homepage on
+        # Pages, which looks like the league shows every other league.
         sp = sport_slug_of(lg["sport_label"])
         if sp != "football":
             legacy = os.path.join(OUT_DIR, "football", lg["slug"])
@@ -3410,7 +3425,7 @@ def main():
                 shutil.rmtree(legacy, ignore_errors=True)
         urls.append(write_file("%s/%s/index.html" % (sp, lg["slug"]),
                                build_league(lg, evs, standings.get(lg["slug"]),
-                                            trend_html)))
+                                            "")))
 
     n_match = 0
     n_skipped = 0
