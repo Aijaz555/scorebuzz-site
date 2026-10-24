@@ -955,6 +955,10 @@ else{var c=pc(e.status.displayClock);if(c!=null){r._clk=c;r._at=Date.now();}
 if(el)el.textContent='LIVE '+(e.status.displayClock||st.shortDetail||'');}
 if(el)el.classList.add('live');}
 }
+function recountLive(){var b=document.getElementById('liveNow');if(!b)return;
+var seen={},n=0;rows.forEach(function(r){var id=r.getAttribute('data-eid');
+if(r._state==='in'&&id&&!seen[id]){seen[id]=1;n++;}});
+b.textContent='\u25cf LIVE NOW ('+n+')';}
 function refresh(){
 if(document.hidden)return;
 var by={};var any=false;
@@ -963,7 +967,7 @@ if(!any)return;
 Object.keys(by).forEach(function(k){
 fetch('/api/'+k+'/scoreboard').then(function(x){return x.json();}).then(function(d){
 var evs={};(d.events||[]).forEach(function(e){evs[String(e.id)]=e;});
-by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);});
+by[k].forEach(function(r){var e=evs[r.getAttribute('data-eid')];if(e)upd(r,e);});recountLive();
 }).catch(function(){}).then(function(){live0=true;});
 });
 }
@@ -1320,7 +1324,7 @@ def build_sport_page(sport_label, sport_slug, sport_leagues, events):
     crumbs = [("Home", "/"), (sport_label, path)]
     body = ["<h1>%s Scores &amp; Fixtures</h1>" % esc(sport_label)]
     if live:
-        body.append('<div class="card" id="live"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+        body.append('<div class="card" id="live"><span class="badge live" id="liveNow">\u25cf LIVE NOW (%d)</span>'
                     % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
@@ -1393,13 +1397,23 @@ def _league_rank(code):
 
 
 def _match_of_day(live, upcoming):
-    """The single featured match. A live top-league game first; otherwise
-    today's biggest fixture (top leagues first) — a live minor-league
-    game never outranks a top-league fixture scheduled today."""
+    """The single featured match. EPL first: any EPL game scheduled today
+    (live, else the earliest upcoming) outranks every other league.
+    Otherwise a live top-league game first, then today's biggest fixture
+    (top leagues first) — a live minor-league game never outranks a
+    top-league fixture scheduled today."""
     today = today_utc()
     dated_live = [m for m in (live or []) if m.get("date")]
     todays = [m for m in (upcoming or [])
               if m.get("date") and m["date"].date() == today]
+    epl_live = [m for m in dated_live if m["league"]["code"] == "eng.1"]
+    if epl_live:
+        return sorted(epl_live,
+                      key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))[0]
+    epl_today = [m for m in todays if m["league"]["code"] == "eng.1"]
+    if epl_today:
+        return sorted(epl_today,
+                      key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))[0]
     top_live = [m for m in dated_live
                 if _league_rank(m["league"]["code"]) < len(_MOTD_LEAGUE_RANK)]
     if top_live:
@@ -1417,19 +1431,30 @@ def _match_of_day(live, upcoming):
 
 
 def _motd_html(m, lg_name):
-    """Big featured card: Match of the Day."""
+    """Big featured card: Match of the Day. Self-updating: its own 15s
+    poll of the match summary flips the badge and score at kickoff and
+    full time, so a stale build can never leave a finished game
+    labelled LIVE (the shared row updater only touches [data-eid]
+    rows, and this card is not one)."""
     lg = m["league"]
     live = m["state"] == "in"
     hs, aws = m["home"].get("score"), m["away"].get("score")
+    ko = esc(fmt_time(m["date"])) if m.get("date") else ""
     if hs is None:
-        mid = '<div class="motd-vs">vs</div><div class="motd-ko">%s</div>' % esc(fmt_time(m["date"]))
+        mid = ('<div class="motd-vs">vs</div>'
+               '<div class="motd-ko" id="motdKo">%s</div>'
+               '<div class="motd-score" id="motdScore" style="display:none">'
+               '<span id="motdHs"></span><span>-</span><span id="motdAs"></span></div>' % ko)
     else:
-        mid = ('<div class="motd-score">%s<span>-</span>%s</div>'
+        mid = ('<div class="motd-ko" id="motdKo" style="display:none"></div>'
+               '<div class="motd-score" id="motdScore">'
+               '<span id="motdHs">%s</span><span>-</span><span id="motdAs">%s</span></div>'
                % (esc(hs), esc(aws)))
-    badge = ('<span class="badge live">\u25cf LIVE</span>' if live
-             else '<span class="badge">%s</span>' % esc(_day_label(m["date"].date(), today_utc())
-                                                       if m.get("date") else ""))
-    return ("""<div class='card motd' id='motd'><a class='motd-cover' href='%s' aria-label='Open match page'></a><div class='motd-tag'>\u2605 Match of the Day %s</div>
+    badge = ('<span class="badge live" id="motdBadge">\u25cf LIVE</span>' if live
+             else '<span class="badge" id="motdBadge">%s</span>'
+             % esc(_day_label(m["date"].date(), today_utc())
+                   if m.get("date") else ""))
+    html = ("""<div class='card motd' id='motd'><a class='motd-cover' href='%s' aria-label='Open match page'></a><div class='motd-tag'>\u2605 Match of the Day %s</div>
 <div class='motd-teams'>
 <a href='%s' class='motd-team'>%s<span>%s</span></a>
 <div class='motd-mid'>%s</div>
@@ -1439,6 +1464,31 @@ def _motd_html(m, lg_name):
             % (match_path(m), badge, match_path(m), team_img(m["home"], 64), esc(m["home"]["name"]),
                mid, match_path(m), team_img(m["away"], 64), esc(m["away"]["name"]),
                league_path(lg), esc(lg_name.get(lg["slug"], lg["name"]))))
+    js = ("<script>(function(){var ev='" + str(m.get("id")) + "',sp='"
+          + lg["sport"] + "',lg='" + lg["code"] + "';"
+          "var b=document.getElementById('motdBadge'),"
+          "ko=document.getElementById('motdKo'),"
+          "sc=document.getElementById('motdScore'),"
+          "hs=document.getElementById('motdHs'),"
+          "as=document.getElementById('motdAs');"
+          "if(!b)return;"
+          "function tick(){fetch('/api/'+sp+'/'+lg+'/summary?event='+ev)"
+          ".then(function(x){return x.json();}).then(function(d){"
+          "try{var c0=(((d.header||{}).competitions||[])[0]||{});"
+          "var st=(c0.status||{}).type||{};var cs=c0.competitors||[];"
+          "var H=null,A=null;cs.forEach(function(c){"
+          "if(c.homeAway==='home')H=c;if(c.homeAway==='away')A=c;});"
+          "if(st.state==='post'){b.textContent=(st.shortDetail||'FT');"
+          "b.classList.remove('live');}"
+          "else if(st.state==='in'){b.textContent='\u25cf LIVE '+"
+          "((c0.status||{}).displayClock||'');b.classList.add('live');}"
+          "else{return;}"
+          "if(H&&A&&H.score!=null&&A.score!=null){"
+          "hs.textContent=H.score;as.textContent=A.score;"
+          "sc.style.display='';if(ko)ko.style.display='none';}"
+          "}catch(e){}}).catch(function(){});}"
+          "tick();setInterval(tick,15000);})();</script>")
+    return html + js
 
 
 _MOTD_CSS = """
@@ -1481,7 +1531,7 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
         body.append(_motd_html(motd, lg_name))
 
     if live:
-        body.append('<div class="card" id="live"><span class="badge live">\u25cf LIVE NOW (%d)</span>'
+        body.append('<div class="card" id="live"><span class="badge live" id="liveNow">\u25cf LIVE NOW (%d)</span>'
                     % len(live))
         body += [match_row(m) for m in live]
         body.append("</div>")
