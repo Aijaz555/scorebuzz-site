@@ -2217,6 +2217,7 @@ def tracker_widget_html(m):
 # stretched "GOAL!" call on goals. Wired only where listed here.
 RADIO_SPOTS = {
     "401879256",  # Aston Villa v Manchester City, Premier League, 2026-10-24
+    "401878768",  # Arsenal v Everton, Premier League, 2026-10-24 19:00 PKT
 }
 
 
