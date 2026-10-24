@@ -1600,9 +1600,49 @@ def build_home(live, upcoming, recent, leagues, trend_html=""):
                 layout=(_sidebar_html(), _rail_html(live, upcoming)))
 
 
-def build_league(league, events, standings, trend_html=""):
+def _league_leaders(events, summaries):
+    """Top scorers + top assists from archived match summaries.
+    Goals only, own goals excluded (as in official scorer charts).
+    Returns (scorers, assists): [(surname, team, count)] sorted best
+    first. Coverage is whatever the archive holds (summaries are kept
+    for every match fetched since launch); callers must say so."""
+    goals, assists = {}, {}
+    for m in events or []:
+        s = (summaries or {}).get(m["id"])
+        if not s:
+            continue
+        teams_by_id = {}
+        for t in (m["home"], m["away"]):
+            if t.get("id"):
+                teams_by_id[str(t["id"])] = t.get("name") or ""
+        for c in s.get("commentary") or []:
+            if _event_kind(c) != "goal":
+                continue
+            txt = c.get("text") or ""
+            if "own goal" in txt.lower():
+                continue
+            name = _scorer_name(txt, c.get("team_name") or "")
+            if not name:
+                continue
+            team = c.get("team_name") or teams_by_id.get(str(c.get("team_id") or ""), "")
+            key = (name, team)
+            goals[key] = goals.get(key, 0) + 1
+            mm = re.search(r"Assisted by ([A-Z][\w\u00c0-\u00ff'\u2019.-]+(?: [A-Z][\w\u00c0-\u00ff'\u2019.-]+){0,2})", txt)
+            if mm:
+                akey = (mm.group(1).split()[-1].rstrip(".,"), team)
+                assists[akey] = assists.get(akey, 0) + 1
+    def rank(d):
+        return sorted(((n, t, c) for (n, t), c in d.items()),
+                      key=lambda x: (-x[2], x[0]))[:10]
+    return rank(goals), rank(assists)
+
+
+def build_league(league, events, standings, trend_html="", summaries=None):
+    today = today_utc()
     upcoming = sorted([m for m in events if m["state"] == "pre"],
                       key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
+    sched = [m for m in upcoming
+             if m["date"] and today <= m["date"].date() <= today + timedelta(days=14)]
     live = [m for m in events if m["state"] == "in"]
     finished = [m for m in events if m["state"] == "post"]
     body = [trend_html,
@@ -1614,13 +1654,21 @@ def build_league(league, events, standings, trend_html=""):
         body.append('<div class="card"><span class="badge live">● LIVE</span>')
         body += [match_row(m) for m in live]
         body.append("</div>")
-    if upcoming:
+    if sched:
+        body.append("<h2>Schedule — Next 2 Weeks</h2>")
+        by_day = {}
+        for m in sched:
+            by_day.setdefault(m["date"].date(), []).append(m)
+        for d in sorted(by_day):
+            body.append('<div class="dayblock" data-day="%s">'
+                        '<h3 style="font-size:13px;margin:8px 0 4px;color:var(--mut)">%s</h3>'
+                        % (d.isoformat(), esc(_day_label(d, today))))
+            body.append("<div class='card'>")
+            body += [match_row(m) for m in by_day[d]]
+            body.append("</div></div>")
+    elif upcoming:
         body.append("<h2>Upcoming Fixtures</h2><div class='card'>")
         body += [match_row(m) for m in upcoming[:40]]
-        body.append("</div>")
-    if finished:
-        body.append("<h2>Results</h2><div class='card'>")
-        body += [match_row(m) for m in finished[:40]]
         body.append("</div>")
     if standings:
         for grp in standings:
@@ -1644,6 +1692,33 @@ def build_league(league, events, standings, trend_html=""):
                                             "short": r["abbr"], "name": r["name"]}),
                                esc(r["name"]), tds))
             body.append("</table></div>")
+    scorers, ass = _league_leaders(events, summaries)
+    if scorers:
+        body.append("<h2>Top Scorers</h2><div class='card' style='overflow-x:auto'>"
+                    "<table><tr><th class='pos'>#</th><th>Player</th><th>Team</th>"
+                    "<th class='num'>Goals</th></tr>")
+        for i, (nm, tm, c) in enumerate(scorers, 1):
+            body.append("<tr><td class='pos'>%d</td><td>%s</td><td>%s</td>"
+                        "<td class='num'>%d</td></tr>"
+                        % (i, esc(nm), esc(tm), c))
+        body.append("</table></div>")
+    if ass:
+        body.append("<h2>Top Assists</h2><div class='card' style='overflow-x:auto'>"
+                    "<table><tr><th class='pos'>#</th><th>Player</th><th>Team</th>"
+                    "<th class='num'>Assists</th></tr>")
+        for i, (nm, tm, c) in enumerate(ass, 1):
+            body.append("<tr><td class='pos'>%d</td><td>%s</td><td>%s</td>"
+                        "<td class='num'>%d</td></tr>"
+                        % (i, esc(nm), esc(tm), c))
+        body.append("</table></div>")
+    if scorers or ass:
+        body.append('<p class="meta">From matches tracked on ScoreBuzz '
+                    '(summaries archived since 19 Oct 2026); totals grow '
+                    'as more matches are tracked.</p>')
+    if finished:
+        body.append("<h2>Results</h2><div class='card'>")
+        body += [match_row(m) for m in finished[:40]]
+        body.append("</div>")
     if not live and not upcoming and not finished and not standings:
         body.append('<div class="card"><p class="meta">No live matches, '
                     'upcoming fixtures or results are available for this '
@@ -3457,9 +3532,10 @@ def main():
         # degrees (audited 2026-10-24: 42 of 60 leagues miss fixtures
         # that exist within 7 days; most soccer boards show none at
         # all, and partial boards like MLS/NFL/NBA stop mid-week), so
-        # EVERY league gets its next 7 days pulled one day at a time
-        # (the range form returns HTTP 400). Dedupe happens below.
-        for _n in range(1, 8):
+        # EVERY league gets its next 14 days pulled one day at a time
+        # (the range form returns HTTP 400). League pages show a
+        # 2-week schedule, so the window must cover it. Dedupe below.
+        for _n in range(1, 15):
             _day = (sb_now + timedelta(days=_n)).strftime("%Y%m%d")
             ddata = fetch_json(base + "?dates=" + _day)
             STATS["scoreboards"] += 1
@@ -3656,7 +3732,7 @@ def main():
                 shutil.rmtree(legacy, ignore_errors=True)
         urls.append(write_file("%s/%s/index.html" % (sp, lg["slug"]),
                                build_league(lg, evs, standings.get(lg["slug"]),
-                                            "")))
+                                            "", arch_summaries)))
 
     n_match = 0
     n_skipped = 0
