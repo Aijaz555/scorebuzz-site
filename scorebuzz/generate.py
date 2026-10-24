@@ -3332,6 +3332,7 @@ def main():
     arch_all = []
     arch_league_events = {}
     _lg_by_key = {(lg["sport"], lg["code"]): lg for lg in leagues}
+    arch_rec_by_key = {}
     for lg_slug, mid, rec in archive_mod.all_records(arc):
         m, s = rec["m"], rec["s"]
         # Re-resolve the league from the CURRENT config by (sport, code),
@@ -3341,6 +3342,8 @@ def main():
         if _cur:
             m = dict(m)
             m["league"] = _cur
+        arch_rec_by_key[((m["league"].get("sport"), m["league"].get("code")),
+                         str(m["id"]))] = rec
         arch_all.append(m)
         arch_summaries[m["id"]] = s
         arch_league_events.setdefault(m["league"]["slug"], []).append(m)
@@ -3431,7 +3434,10 @@ def main():
     n_skipped = 0
     for m in arch_all:
         lg_slug = m["league"]["slug"]
-        rec = arc[lg_slug][str(m["id"])]
+        # Look the record up by (sport, code, id): after a league re-slug
+        # the archive bucket key is the OLD slug, so arc[lg_slug] misses.
+        rec = arch_rec_by_key[((m["league"].get("sport"),
+                                m["league"].get("code")), str(m["id"]))]
         h = "%s|v%d" % (rec["hash"], archive_mod.TEMPLATE_VERSION)
         rel = "%s/%s/%s/index.html" % (
             sport_slug_of(m["league"].get("sport_label")), lg_slug, match_slug(m))
