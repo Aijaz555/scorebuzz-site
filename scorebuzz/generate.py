@@ -328,7 +328,8 @@ def score_text(m):
 def parse_summary(data, m):
     """Extract commentary, stats, lineups, form, h2h, leaders from a summary."""
     out = {"commentary": [], "stats": [], "lineups": [],
-           "last_five": [], "h2h": [], "leaders": [], "venue_extra": {}}
+           "last_five": [], "h2h": [], "leaders": [], "venue_extra": {},
+           "standings": []}
 
     # --- commentary / play-by-play ---
     for ke in data.get("keyEvents") or []:
@@ -414,10 +415,35 @@ def parse_summary(data, m):
             })
 
     # --- recent form (last five games per team) ---
+    # Real shape is FLAT (homeTeamId/homeTeamScore/gameResult/...);
+    # the competitions-nested branch below is kept as a fallback.
     for lf in data.get("lastFiveGames") or []:
         team = lf.get("team") or {}
         games = []
         for ge in lf.get("events") or []:
+            if "homeTeamId" in ge or "awayTeamId" in ge:
+                my_id = str(team.get("id") or "")
+                if my_id == str(ge.get("homeTeamId") or ""):
+                    ms, os_ = ge.get("homeTeamScore"), ge.get("awayTeamScore")
+                elif my_id == str(ge.get("awayTeamId") or ""):
+                    ms, os_ = ge.get("awayTeamScore"), ge.get("homeTeamScore")
+                else:
+                    continue
+                opp = ge.get("opponent") or {}
+                res = ge.get("gameResult") or ""
+                try:
+                    if not res and ms is not None and os_ is not None:
+                        mi, oi = int(ms), int(os_)
+                        res = "W" if mi > oi else ("D" if mi == oi else "L")
+                except (ValueError, TypeError):
+                    pass
+                games.append({
+                    "opp": opp.get("abbreviation") or "",
+                    "score": ("%s-%s" % (ms, os_)) if ms is not None else "",
+                    "result": res,
+                    "date": (ge.get("gameDate") or "")[:10],
+                })
+                continue
             gcomps = ge.get("competitions") or []
             if not gcomps:
                 continue
@@ -460,11 +486,11 @@ def parse_summary(data, m):
             for ge in evs:
                 if not isinstance(ge, dict):
                     continue
-                gcomps = ge.get("competitions") or []
-                if not gcomps:
-                    continue
-                gc = gcomps[0]
-                gcs = gc.get("competitors") or []
+                gcs = ge.get("competitors") or []
+                if len(gcs) < 2:
+                    gcomps = ge.get("competitions") or []
+                    if gcomps:
+                        gcs = gcomps[0].get("competitors") or []
                 if len(gcs) < 2:
                     continue
                 names = [(c.get("team") or {}).get("abbreviation") or "" for c in gcs]
@@ -478,6 +504,23 @@ def parse_summary(data, m):
                     "t1": str((gcs[1].get("team") or {}).get("id") or ""),
                     "s1": gcs[1].get("score"),
                 })
+
+    # --- league standings (from the summary: the dedicated standings
+    # endpoint 404s for soccer, but every match summary carries the
+    # full table; entries carry the team name as a plain string) ---
+    for g in (data.get("standings") or {}).get("groups") or []:
+        entries = (g.get("standings") or {}).get("entries") or []
+        rows = []
+        for e in entries:
+            stats = {s.get("name"): s.get("displayValue")
+                     for s in e.get("stats") or []}
+            rows.append({"name": e.get("team") or "",
+                         "abbr": e.get("abbreviation") or "",
+                         "logo": e.get("logo") or "",
+                         "stats": stats})
+        if rows:
+            out["standings"].append({"name": g.get("header") or "",
+                                     "rows": rows})
 
     # --- key players / stat leaders ---
     for lg in data.get("leaders") or []:
@@ -1057,10 +1100,20 @@ def proxy_img(u):
     return u or ""
 
 
+def _logo_url(v):
+    """A logo may be a plain URL string or a list of logo dicts."""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, list) and v and isinstance(v[0], dict):
+        return v[0].get("href") or ""
+    return ""
+
+
 def team_img(t, size=20):
-    if t.get("logo"):
+    logo = _logo_url(t.get("logo"))
+    if logo:
         return ('<img src="%s" alt="%s logo" width="%d" height="%d" loading="lazy">'
-                % (esc(proxy_img(t["logo"])), esc(t["short"] or t["name"]), size, size))
+                % (esc(proxy_img(logo)), esc(t["short"] or t["name"]), size, size))
     return ('<span class="tlg" style="width:%dpx;height:%dpx;font-size:%dpx">%s</span>'
             % (size, size, max(8, int(size * 0.4)),
                esc(_initials(t.get("name") or t.get("short") or "?"))))
@@ -1637,6 +1690,16 @@ def _league_leaders(events, summaries):
     return rank(goals), rank(assists)
 
 
+def _standings_from_summaries(events, summaries):
+    """Newest archived summary that carries a standings table (the
+    dedicated standings endpoint 404s for soccer)."""
+    for m in events or []:
+        s = (summaries or {}).get(m["id"])
+        if s and s.get("standings"):
+            return s["standings"]
+    return None
+
+
 def build_league(league, events, standings, trend_html="", summaries=None):
     today = today_utc()
     upcoming = sorted([m for m in events if m["state"] == "pre"],
@@ -1674,12 +1737,7 @@ def build_league(league, events, standings, trend_html="", summaries=None):
         for grp in standings:
             body.append("<h2>Standings%s</h2>" %
                         (" — " + esc(grp["name"]) if grp["name"] else ""))
-            cols = []
-            for r in grp["rows"]:
-                for k in r["stats"]:
-                    if k not in cols:
-                        cols.append(k)
-            cols = cols[:6]
+            cols = _standings_cols(grp["rows"])
             body.append("<div class='card' style='overflow-x:auto'>"
                         "<table><tr><th class='pos'>#</th><th>Team</th>" +
                         "".join("<th class='num'>%s</th>" % esc(pretty_stat(c))
@@ -1735,7 +1793,22 @@ def build_league(league, events, standings, trend_html="", summaries=None):
 def pretty_stat(name):
     return {"wins": "W", "losses": "L", "ties": "D", "points": "Pts",
             "pointsFor": "PF", "pointsAgainst": "PA",
+            "pointDifferential": "GD",
             "gamesPlayed": "P"}.get(name, name[:4].upper())
+
+
+def _standings_cols(rows):
+    """Standings columns in standard order (P W D L GD Pts ...), not
+    whatever order the feed lists its stats in."""
+    seen = []
+    for r in rows:
+        for k in r["stats"]:
+            if k not in seen:
+                seen.append(k)
+    pref = ["gamesPlayed", "wins", "ties", "losses", "pointDifferential",
+            "points", "pointsFor", "pointsAgainst"]
+    ordered = [k for k in pref if k in seen] + [k for k in seen if k not in pref]
+    return ordered[:6]
 
 # ----------------------------------------------------------------------------
 # Match + team pages
@@ -2345,6 +2418,14 @@ RADIO_SPOTS = {
     "401878768",  # Arsenal v Everton, Premier League, 2026-10-24 19:00 PKT
 }
 
+# Match-page layout test: ONE match renders the SportScore-order layout
+# (stat strip, standings, league fixtures, about/FAQ) in ScoreBuzz's own
+# styling, with no betting content. Every other match keeps the classic
+# layout byte-for-byte. Expand only on his word.
+MATCH_PAGE_V2_SPOTS = {
+    "401878768",  # Arsenal v Everton, Premier League, 2026-10-24 19:00 PKT
+}
+
 
 def radio_player_html(m):
     if str(m.get("id")) not in RADIO_SPOTS or m.get("state") == "post":
@@ -2496,7 +2577,115 @@ pollT=setTimeout(poll,15000);};
             '</div>' + js)
 
 
-def build_match(m, summ):
+def _stat_strip_html(stats):
+    """Compact headline numbers under the hero: possession, shots, on
+    target, corners, fouls, cards — only metrics the feed carries."""
+    want = []
+    for s in stats or []:
+        lab = (s.get("label") or "").lower()
+        if "possession" in lab:
+            want.append(("Possession", s))
+        elif "total shots" in lab:
+            want.append(("Shots", s))
+        elif "shots on target" in lab:
+            want.append(("On Target", s))
+        elif "corner" in lab:
+            want.append(("Corners", s))
+        elif "fouls" in lab:
+            want.append(("Fouls", s))
+        elif "yellow" in lab:
+            want.append(("Yellow Cards", s))
+    if not want:
+        return ""
+    items = "".join(
+        "<div class='ss'><b>%s</b><span class='l'>%s</span><b>%s</b></div>"
+        % (esc(s.get("home") or "-"), lbl, esc(s.get("away") or "-"))
+        for lbl, s in want[:6])
+    return ("<style>.stat-strip{display:flex;flex-wrap:wrap;gap:8px}"
+            ".ss{flex:1 1 100px;display:flex;justify-content:space-between;"
+            "align-items:center;background:var(--card,#fff);border:1px solid #e3e7ee;"
+            "border-radius:10px;padding:8px 10px}.ss .l{font-size:11px;"
+            "color:var(--mut,#5b6472)}</style>"
+            "<div class='card stat-strip'>%s</div>" % items)
+
+
+def _standings_mini_html(standings, home_name, away_name, lg):
+    """League table with the two teams highlighted + full-table link."""
+    if not standings:
+        return ""
+    grp = standings[0]
+    cols = _standings_cols(grp["rows"])
+    rows = []
+    for i, r in enumerate(grp["rows"], 1):
+        hl = " style='background:#e8f5ee'" if r["name"] in (home_name, away_name) else ""
+        tds = "".join("<td class='num'>%s</td>" % esc(r["stats"].get(c, "-"))
+                      for c in cols)
+        rows.append("<tr%s><td class='pos'>%d</td><td>%s %s</td>%s</tr>"
+                    % (hl, i, team_img({"logo": r["logo"],
+                                        "short": r["abbr"], "name": r["name"]}),
+                       esc(r["name"]), tds))
+    return ("<h2>Standings</h2><div class='card' style='overflow-x:auto'>"
+            "<table><tr><th class='pos'>#</th><th>Team</th>" +
+            "".join("<th class='num'>%s</th>" % esc(pretty_stat(c))
+                    for c in cols) + "</tr>" +
+            "".join(rows) + "</table></div>"
+            "<p class='meta'><a href='%s'>Full table &rarr;</a></p>"
+            % league_path(lg))
+
+
+def _league_matches_html(league_events, m):
+    """Same-league recent results + upcoming fixtures for a match page."""
+    if not league_events:
+        return ""
+    res = sorted([x for x in league_events
+                  if x["state"] == "post" and x["id"] != m["id"] and x["date"]],
+                 key=lambda x: x["date"], reverse=True)[:5]
+    up = sorted([x for x in league_events
+                 if x["state"] == "pre" and x["date"]],
+                key=lambda x: x["date"])[:5]
+    out = []
+    if res:
+        out.append("<h2>Recent Results in %s</h2><div class='card'>"
+                   % esc(m["league"]["name"]))
+        out += [match_row(x) for x in res]
+        out.append("</div>")
+    if up:
+        out.append("<h2>Upcoming Fixtures in %s</h2><div class='card'>"
+                   % esc(m["league"]["name"]))
+        out += [match_row(x) for x in up]
+        out.append("</div>")
+    return "\n".join(out)
+
+
+def _about_faq_html(m, lg):
+    """About box + FAQ with real values only (no referee/season: the
+    feed does not carry them)."""
+    hn, an = m["home"]["name"], m["away"]["name"]
+    when = fmt_date(m["date"]) + (" " + fmt_time(m["date"]) if m["date"] else "")
+    venue = m["venue"] + (" \u2014 " + m["city"] if m["city"] else "") if m["venue"] else (m["city"] or "")
+    hs, aws = m["home"].get("score"), m["away"].get("score")
+    if m["state"] == "post" and hs is not None:
+        score_txt = "The final score was %s %s-%s %s." % (hn, hs, aws, an)
+    elif m["state"] == "in" and hs is not None:
+        score_txt = "The match is live: %s %s-%s %s." % (hn, hs, aws, an)
+    else:
+        score_txt = "The match has not kicked off yet."
+    return (
+        "<h2>About This Match</h2><div class='card'>"
+        "<p><b>Competition:</b> <a href='%s'>%s</a></p>"
+        "<p><b>Kick-off:</b> %s</p>"
+        "<p><b>Venue:</b> %s</p>"
+        "<p>%s Follow every goal, card and substitution in the live commentary above.</p>"
+        "<h3 style='font-size:14px;margin:12px 0 4px'>When is %s vs %s?</h3><p>Kick-off is %s.</p>"
+        "<h3 style='font-size:14px;margin:12px 0 4px'>Where is %s vs %s played?</h3><p>%s.</p>"
+        "<h3 style='font-size:14px;margin:12px 0 4px'>What is the score?</h3><p>%s</p>"
+        "</div>"
+        % (league_path(lg), esc(lg["name"]), esc(when), esc(venue or "TBC"),
+           esc(score_txt), esc(hn), esc(an), esc(when), esc(hn), esc(an),
+           esc(venue or "Venue to be confirmed"), esc(score_txt)))
+
+
+def build_match(m, summ, standings=None, league_events=None):
     lg, path = m["league"], match_path(m)
     hs, aws = m["home"].get("score"), m["away"].get("score")
     if m["state"] == "post" and hs is not None:
@@ -2591,10 +2780,11 @@ def build_match(m, summ):
     tw = tracker_widget_html(m)
     if tw:
         parts.append(tw)
+    cast_html = ""
     widget_done = False
     if summ:
         if m["league"]["sport"] == "football" and summ.get("nfl_plays"):
-            parts.append(nfl_widget_html(m, summ["nfl_plays"]))
+            cast_html = nfl_widget_html(m, summ["nfl_plays"])
             widget_done = True
         else:
             cplays = summ.get("cast_plays") or []
@@ -2604,31 +2794,72 @@ def build_match(m, summ):
                            "hs": None, "as": None}
                           for c in summ["commentary"]]
             if cplays:
-                parts.append(cast_widget_html(m, cplays))
+                cast_html = cast_widget_html(m, cplays)
                 widget_done = True
     if not widget_done and m["state"] in ("in", "pre"):
-        parts.append(cast_widget_html(m, []))
+        cast_html = cast_widget_html(m, [])
+    tl_html = form_s = h2h_s = stats_s = lineups_s = ""
+    formation_s = leaders_s = commentary_s = ""
+    placeholder = ""
     if summ:
-        tl = timeline_html(summ.get("commentary"), m["home"]["id"], m["away"]["id"],
-                           m["home"].get("short") or m["home"]["name"],
-                           m["away"].get("short") or m["away"]["name"])
-        if tl:
-            parts.append(tl)
-        parts.append(form_html(summ["last_five"]))
-        parts.append(h2h_html(summ["h2h"], m["home"]["id"], m["away"]["id"],
+        tl_html = timeline_html(summ.get("commentary"), m["home"]["id"], m["away"]["id"],
                                 m["home"].get("short") or m["home"]["name"],
-                                m["away"].get("short") or m["away"]["name"]))
-        parts.append(stat_bars(summ["stats"]))
+                                m["away"].get("short") or m["away"]["name"])
+        form_s = form_html(summ["last_five"])
+        h2h_s = h2h_html(summ["h2h"], m["home"]["id"], m["away"]["id"],
+                         m["home"].get("short") or m["home"]["name"],
+                         m["away"].get("short") or m["away"]["name"])
+        stats_s = stat_bars(summ["stats"])
         teams_by_id = {m["home"]["id"]: m["home"], m["away"]["id"]: m["away"]}
-        parts.append(lineups_html(summ["lineups"], teams_by_id))
-        fh = formation_html(summ["lineups"], m["home"]["id"], m["away"]["id"])
-        if fh:
-            parts.append(fh)
-        parts.append(leaders_html(summ["leaders"]))
-        parts.append(commentary_html(summ["commentary"]))
+        lineups_s = lineups_html(summ["lineups"], teams_by_id)
+        formation_s = formation_html(summ["lineups"], m["home"]["id"], m["away"]["id"])
+        leaders_s = leaders_html(summ["leaders"])
+        commentary_s = commentary_html(summ["commentary"])
     elif m["state"] == "pre":
-        parts.append("<div class='card'><p class='meta'>Lineups, stats and "
-                     "live commentary will appear here once the match begins.</p></div>")
+        placeholder = ("<div class='card'><p class='meta'>Lineups, stats and "
+                       "live commentary will appear here once the match begins.</p></div>")
+    if str(m.get("id")) not in MATCH_PAGE_V2_SPOTS:
+        # Classic layout, unchanged.
+        if cast_html:
+            parts.append(cast_html)
+        if tl_html:
+            parts.append(tl_html)
+        parts.append(form_s)
+        parts.append(h2h_s)
+        parts.append(stats_s)
+        parts.append(lineups_s)
+        if formation_s:
+            parts.append(formation_s)
+        parts.append(leaders_s)
+        parts.append(commentary_s)
+        if placeholder:
+            parts.append(placeholder)
+    else:
+        # Test layout: SportScore section order, ScoreBuzz styling,
+        # no betting content. Live commentary lives in the cast widget
+        # (the baked list is dropped to avoid duplication).
+        if summ:
+            parts.append(_stat_strip_html(summ["stats"]))
+        if tl_html:
+            parts.append(tl_html)
+        if cast_html:
+            parts.append(cast_html)
+        parts.append(stats_s)
+        parts.append(form_s)
+        parts.append(h2h_s)
+        st = standings or (summ.get("standings") if summ else None)
+        if st:
+            parts.append(_standings_mini_html(st, m["home"]["name"],
+                                              m["away"]["name"], lg))
+        parts.append(lineups_s)
+        if formation_s:
+            parts.append(formation_s)
+        parts.append(leaders_s)
+        if league_events:
+            parts.append(_league_matches_html(league_events, m))
+        parts.append(_about_faq_html(m, lg))
+        if placeholder:
+            parts.append(placeholder)
 
     lg_path = league_path(lg)
     crumbs = [("Home", "/"), (lg["name"], lg_path),
@@ -3731,7 +3962,9 @@ def main():
             if os.path.isdir(legacy):
                 shutil.rmtree(legacy, ignore_errors=True)
         urls.append(write_file("%s/%s/index.html" % (sp, lg["slug"]),
-                               build_league(lg, evs, standings.get(lg["slug"]),
+                               build_league(lg, evs,
+                                            standings.get(lg["slug"]) or
+                                            _standings_from_summaries(evs, arch_summaries),
                                             "", arch_summaries)))
 
     n_match = 0
@@ -3752,7 +3985,9 @@ def main():
             match_urls.append(page_url)
             n_skipped += 1
             continue
-        urls.append(write_file(rel, build_match(m, arch_summaries.get(m["id"]))))
+        urls.append(write_file(rel, build_match(m, arch_summaries.get(m["id"]),
+                                                  standings.get(lg_slug),
+                                                  arch_league_events.get(lg_slug))))
         match_urls.append(page_url)
         rec["rendered_hash"] = h
         n_match += 1
