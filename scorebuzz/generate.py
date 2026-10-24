@@ -216,6 +216,24 @@ def fmt_time(dt):
 
 def parse_competitor(c, logo_sport):
     team = c.get("team") or {}
+    ath = c.get("athlete") or {}
+    if not team and ath:
+        # Individual sports (MMA, tennis): competitors are athletes,
+        # not teams. Flag = country flag, record = e.g. "24-3-1".
+        recs = c.get("records") or []
+        return {
+            "id": str(c.get("id") or ath.get("id") or ""),
+            "name": ath.get("displayName") or ath.get("fullName") or "",
+            "short": ath.get("shortName") or ath.get("displayName") or "",
+            "abbr": ath.get("shortName") or "",
+            "score": c.get("score"),
+            "winner": bool(c.get("winner")),
+            "home_away": c.get("homeAway") or "",
+            "logo": _logo_url((ath.get("flag") or {}).get("href")) or "",
+            "color": "888888",
+            "record": recs[0].get("summary") if recs else "",
+            "form": c.get("form") or "",
+        }
     logo = team.get("logo")
     if not logo and team.get("id"):
         logo = ("https://a.espncdn.com/i/teamlogos/%s/500/%s.png"
@@ -272,6 +290,48 @@ def parse_event(league, event):
         "country": addr.get("country") or "",
         "attendance": comp.get("attendance"),
     }
+
+
+def parse_mma_event(league, event):
+    """Expand a UFC card into one match per fight. ESPN models a card
+    as ONE event with a competition per fight; treating the card as a
+    single match produced blank "match vs match" pages stuck LIVE."""
+    out = []
+    comps = event.get("competitions") or []
+    if not comps:
+        return out
+    venue = comps[0].get("venue") or event.get("venue") or {}
+    addr = venue.get("address") or {}
+    for comp in comps:
+        competitors = comp.get("competitors") or []
+        if len(competitors) < 2:
+            continue
+        cst = comp.get("status") or {}
+        ctype = cst.get("type") or {}
+        hm = parse_competitor(competitors[0], league["logo_sport"])
+        am = parse_competitor(competitors[1], league["logo_sport"])
+        out.append({
+            "id": str(comp.get("id")),
+            "league": league,
+            "name": "%s vs %s" % (hm["name"], am["name"]),
+            "short_name": "%s vs %s" % (hm["short"] or hm["name"],
+                                         am["short"] or am["name"]),
+            "date": parse_dt(comp.get("date") or event.get("date") or ""),
+            "state": ctype.get("state") or "pre",
+            "status_text": ctype.get("shortDetail") or ctype.get("detail") or "",
+            # clock left empty on purpose: status_label then uses the
+            # status text ("R1, 1:49") instead of a bare clock ("1:49").
+            "clock": "",
+            "period": cst.get("period") or "",
+            "home": hm,
+            "away": am,
+            "venue": venue.get("fullName") or "",
+            "city": addr.get("city") or "",
+            "country": addr.get("country") or "",
+            "attendance": comp.get("attendance"),
+            "weight_class": (comp.get("type") or {}).get("abbreviation") or "",
+        })
+    return out
 
 
 def match_slug(m):
@@ -1157,7 +1217,11 @@ def match_row(m, comp=None):
         sc += _flap_mini(_mi, "m") + '<span class="cd-sep">:</span>'
         sc += _flap_mini(_ss, "s") + '</div>'
     elif hs is None:
-        sc = '<div class="sc">%s</div>' % esc(fmt_time(m["date"]))
+        if m["state"] == "post":
+            _w = m["home"] if m["home"].get("winner") else (m["away"] if m["away"].get("winner") else None)
+            sc = '<div class="sc">%s</div>' % esc((_w["short"] or _w["name"]) if _w else "Draw")
+        else:
+            sc = '<div class="sc">%s</div>' % esc(fmt_time(m["date"]))
     else:
         sc = ('<div class="sc"><span class="js-hs %s">%s</span><br>'
               '<span class="js-as %s">%s</span></div>'
@@ -2694,6 +2758,11 @@ def build_match(m, summ, standings=None, league_events=None):
         desc = ("Full-time result %s %s-%s %s in the %s. Stats, lineups, "
                 "commentary and head-to-head on ScoreBuzz."
                 % (m["home"]["name"], hs, aws, m["away"]["name"], lg["name"]))
+    elif m["state"] == "post":
+        title = ("%s vs %s: Result | ScoreBuzz"
+                 % (m["home"]["name"], m["away"]["name"]))
+        desc = ("Full-time result %s vs %s in the %s on ScoreBuzz."
+                % (m["home"]["name"], m["away"]["name"], lg["name"]))
     elif m["state"] == "in":
         title = ("%s vs %s Live Score, Stats & Commentary | ScoreBuzz"
                  % (m["home"]["name"], m["away"]["name"]))
@@ -2720,7 +2789,7 @@ def build_match(m, summ, standings=None, league_events=None):
         venue_line = m["venue"] + (" \u2014 " + m["city"] if m["city"] else "")
     elif m["city"]:
         venue_line = m["city"]
-    meta_line = " \u00b7 ".join(b for b in (when, venue_line) if b)
+    meta_line = " \u00b7 ".join(b for b in (when, venue_line, m.get("weight_class")) if b)
     big_html = ('<div class=\'big js-big\'>%s %s %s</div>'
                 % (esc(hs if hs is not None else ""),
                    '<span class="vs">-</span>' if hs is not None else '<span class="vs">vs</span>',
@@ -2754,6 +2823,11 @@ def build_match(m, summ, standings=None, league_events=None):
     elif m["state"] == "in":
         action = ("<a class='wbtn live js-wbtn' href='#sbzWatch'>"
                   "<span class='pulse'></span>LIVE</a>")
+    winner_line = ""
+    if m["league"]["sport"] == "mma" and m["state"] == "post":
+        _w = m["home"] if m["home"].get("winner") else (m["away"] if m["away"].get("winner") else None)
+        if _w:
+            winner_line = "<div class='hero-meta'>Winner: %s</div>" % esc(_w["name"])
     hero = (
         "<div class='card scoreboard-hero'%s>"
         "<div class='hero-comp'><a href='%s'>%s</a></div>"
@@ -2771,7 +2845,7 @@ def build_match(m, summ, standings=None, league_events=None):
            mid_inner,
            badge, action,
            esc(team_slug(m["away"])), team_img(m["away"], 46), esc(m["away"]["name"]),
-           _scorers_html(m, summ)))
+           _scorers_html(m, summ) + winner_line))
     parts = []
     rb = radio_player_html(m)
     if rb:
@@ -2816,8 +2890,12 @@ def build_match(m, summ, standings=None, league_events=None):
         leaders_s = leaders_html(summ["leaders"])
         commentary_s = commentary_html(summ["commentary"])
     elif m["state"] == "pre":
-        placeholder = ("<div class='card'><p class='meta'>Lineups, stats and "
-                       "live commentary will appear here once the match begins.</p></div>")
+        if m["league"]["sport"] == "mma":
+            placeholder = ("<div class='card'><p class='meta'>Fight details and "
+                           "result will appear here once the fight begins.</p></div>")
+        else:
+            placeholder = ("<div class='card'><p class='meta'>Lineups, stats and "
+                           "live commentary will appear here once the match begins.</p></div>")
     if str(m.get("id")) not in MATCH_PAGE_V2_SPOTS:
         # Classic layout, unchanged.
         if cast_html:
@@ -3783,15 +3861,18 @@ def main():
             if str(ev.get("id")) in _seen_ev:
                 continue
             _seen_ev.add(str(ev.get("id")))
-            m = parse_event(lg, ev)
-            if not m:
-                continue
-            events.append(m)
-            all_matches.append(m)
-            for t in (m["home"], m["away"]):
-                if t["id"]:
-                    rec = teams.setdefault(t["id"], dict(t))
-                    rec.setdefault("events", []).append(m)
+            if lg["sport"] == "mma":
+                ms = parse_mma_event(lg, ev)
+            else:
+                m = parse_event(lg, ev)
+                ms = [m] if m else []
+            for m in ms:
+                events.append(m)
+                all_matches.append(m)
+                for t in (m["home"], m["away"]):
+                    if t["id"]:
+                        rec = teams.setdefault(t["id"], dict(t))
+                        rec.setdefault("events", []).append(m)
         league_events[lg["slug"]] = sorted(
             events, key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc))
         log("scoreboard %s: %d events" % (lg["slug"], len(events)))
@@ -3801,6 +3882,11 @@ def main():
     lo, hi = now - timedelta(days=SUMMARY_WINDOW_DAYS), now + timedelta(days=SUMMARY_WINDOW_DAYS)
     summaries = {}
     for lg in leagues:
+        if lg["sport"] == "mma":
+            # No summary endpoint serves fight ids (verified 404);
+            # skip the pointless fetches.
+            log("summaries %s: skipped (no fight summary endpoint)" % lg["slug"])
+            continue
         done = 0
         for m in league_events.get(lg["slug"], []):
             if done >= MAX_SUMMARIES_PER_LEAGUE:
@@ -3877,6 +3963,24 @@ def main():
         if _cur:
             m = dict(m)
             m["league"] = _cur
+        if not ((m.get("home") or {}).get("name") or (m.get("away") or {}).get("name")):
+            # Unrenderable record (e.g. the old UFC card-level page with
+            # blank fighter names): keep it out of every list and
+            # delete its stale page file so it stops serving.
+            try:
+                _rel = "%s/%s/%s/index.html" % (
+                    sport_slug_of(m["league"].get("sport_label")),
+                    m["league"]["slug"], match_slug(m))
+                _full = os.path.join(OUT_DIR, _rel)
+                if os.path.exists(_full):
+                    os.remove(_full)
+                    try:
+                        os.rmdir(os.path.dirname(_full))
+                    except OSError:
+                        pass
+            except Exception:
+                pass
+            continue
         arch_rec_by_key[((m["league"].get("sport"), m["league"].get("code")),
                          str(m["id"]))] = rec
         arch_all.append(m)
