@@ -1268,7 +1268,7 @@ def _rail_html(live, upcoming=None):
     else:
         out.append('<p class="meta">No live matches right now.</p>')
     out.append('</div>')
-    tops = sorted(LEAGUES, key=lambda r: _league_rank(r[3]))[:7]
+    tops = sorted(LEAGUES, key=lambda r: _league_rank(r[1]))[:7]
     out.append('<div class="sidebox"><h3>Popular Leagues</h3>')
     for row in tops:
         out.append('<a href="%s">%s</a>' % (league_path_for(row[4], row[3]), esc(row[2])))
@@ -1380,25 +1380,34 @@ _MOTD_LEAGUE_RANK = [
 ]
 
 
-def _league_rank(slug):
+def _league_rank(code):
     try:
-        return _MOTD_LEAGUE_RANK.index(slug)
+        return _MOTD_LEAGUE_RANK.index(code)
     except ValueError:
         return 999
 
 
 def _match_of_day(live, upcoming):
-    """The single featured match: top live game, else the biggest fixture today."""
-    cands = [m for m in (live or []) if m.get("date")]
-    if not cands:
-        today = today_utc()
-        cands = [m for m in (upcoming or [])
-                 if m.get("date") and m["date"].date() == today]
-    if not cands:
+    """The single featured match. A live top-league game first; otherwise
+    today's biggest fixture (top leagues first) — a live minor-league
+    game never outranks a top-league fixture scheduled today."""
+    today = today_utc()
+    dated_live = [m for m in (live or []) if m.get("date")]
+    todays = [m for m in (upcoming or [])
+              if m.get("date") and m["date"].date() == today]
+    top_live = [m for m in dated_live
+                if _league_rank(m["league"]["code"]) < len(_MOTD_LEAGUE_RANK)]
+    if top_live:
+        cands = top_live
+    elif todays:
+        cands = todays
+    elif dated_live:
+        cands = dated_live
+    else:
         cands = list(upcoming or [])[:1]
     if not cands:
         return None
-    return sorted(cands, key=lambda m: (_league_rank(m["league"]["slug"]),
+    return sorted(cands, key=lambda m: (_league_rank(m["league"]["code"]),
                                        m["date"] or datetime.max.replace(tzinfo=timezone.utc)))[0]
 
 
@@ -2155,11 +2164,10 @@ def _scorers_html(m, summ):
 # slug. Free-tier terms: the "Powered by SportScore" attribution must stay
 # visible on pages that carry the tracker.
 TRACKER_SPOTS = {
-    "401877877": "atletico-nacional-vs-deportivo-pasto",  # Atletico Nacional v Deportivo Pasto, Primera A, 2026-10-23
-    "401884761": "vfb-stuttgart-vs-borussia-monchengladbach",  # VfB Stuttgart v Borussia M'gladbach, Bundesliga, 2026-10-23 23:30 PKT
-    "401876428": "ogc-nice-vs-stade-brestois-29",  # Stade Brestois 29 v OGC Nice, Ligue 1, 2026-10-23 23:45 PKT
-    "401874957": "torino-vs-monza",  # Torino v Monza, Serie A, 2026-10-23 23:45 PKT
-    "401882836": "deportivo-alaves-vs-malaga",  # Deportivo Alaves v Malaga, La Liga, 2026-10-23 00:00 PKT (Oct 24)
+    "401879256": "aston-villa-vs-manchester-city",  # Aston Villa v Manchester City, Premier League, 2026-10-24 16:30 PKT
+    "401878768": "arsenal-vs-everton",  # Arsenal v Everton, Premier League, 2026-10-24 19:00 PKT
+    "401879255": "coventry-city-vs-fulham",  # Coventry City v Fulham, Premier League, 2026-10-24 19:00 PKT
+    "401878767": "chelsea-vs-tottenham-hotspur",  # Chelsea v Tottenham Hotspur, Premier League, 2026-10-24 21:30 PKT
 }
 
 
