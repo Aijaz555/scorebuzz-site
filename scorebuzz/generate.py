@@ -46,7 +46,7 @@ MAX_SUMMARIES_PER_LEAGUE = 50
 
 # (espn_sport, espn_league, display name, url slug, sport label, espncdn logo sport)
 LEAGUES = [
-    ("soccer", "eng.1", "Premier League", "england-premier-league", "Football", "soccer"),
+    ("soccer", "eng.1", "English Premier League", "english-premier-league", "Football", "soccer"),
     ("soccer", "esp.1", "La Liga", "la-liga", "Football", "soccer"),
     ("soccer", "ita.1", "Serie A", "serie-a", "Football", "soccer"),
     ("soccer", "ger.1", "Bundesliga", "bundesliga", "Football", "soccer"),
@@ -116,7 +116,7 @@ STATS = {"scoreboards": 0, "summaries": 0, "failed": 0, "failed_leagues": []}
 
 # League prestige weights for the trending bar (higher = more prominent).
 LEAGUE_WEIGHT = {
-    "champions-league": 100, "england-premier-league": 95, "la-liga": 90,
+    "champions-league": 100, "english-premier-league": 95, "la-liga": 90,
     "nfl": 88, "serie-a": 85, "bundesliga": 84, "nba": 82, "ligue-1": 80,
     "europa-league": 78, "mlb": 75, "nhl": 75, "ufc": 72, "mls": 70,
     "eredivisie": 68, "primeira-liga": 66, "championship": 64, "wnba": 60,
@@ -3221,6 +3221,28 @@ def main():
             STATS["scoreboards"] += 1
             if ddata and ddata.get("events"):
                 raw_events.extend(ddata["events"])
+        # 1b) forward fixtures: some ESPN boards (notably soccer leagues
+        # like eng.1) only expose the current US-Eastern day, so their
+        # league pages would show no schedule at all. If nothing fetched
+        # so far is an upcoming match dated after today (UTC), pull the
+        # next 7 days one day at a time (the range form returns HTTP 400).
+        _has_future = False
+        for ev in raw_events:
+            try:
+                if (ev.get("status", {}).get("type", {}).get("state") == "pre"
+                        and (ev.get("date") or "")[:10]
+                        > sb_now.strftime("%Y-%m-%d")):
+                    _has_future = True
+                    break
+            except Exception:
+                pass
+        if not _has_future:
+            for _n in range(1, 8):
+                _day = (sb_now + timedelta(days=_n)).strftime("%Y%m%d")
+                ddata = fetch_json(base + "?dates=" + _day)
+                STATS["scoreboards"] += 1
+                if ddata and ddata.get("events"):
+                    raw_events.extend(ddata["events"])
         if not raw_events:
             STATS["failed"] += 1
             STATS["failed_leagues"].append(lg["slug"])
@@ -3315,11 +3337,19 @@ def main():
     arch_summaries = {}
     arch_all = []
     arch_league_events = {}
+    _lg_by_key = {(lg["sport"], lg["code"]): lg for lg in leagues}
     for lg_slug, mid, rec in archive_mod.all_records(arc):
         m, s = rec["m"], rec["s"]
+        # Re-resolve the league from the CURRENT config by (sport, code),
+        # so a league rename / re-slug applies to archived matches too.
+        _cur = _lg_by_key.get(((m.get("league") or {}).get("sport"),
+                               (m.get("league") or {}).get("code")))
+        if _cur:
+            m = dict(m)
+            m["league"] = _cur
         arch_all.append(m)
         arch_summaries[m["id"]] = s
-        arch_league_events.setdefault(lg_slug, []).append(m)
+        arch_league_events.setdefault(m["league"]["slug"], []).append(m)
     for lg_slug in arch_league_events:
         arch_league_events[lg_slug].sort(
             key=lambda m: m["date"] or datetime.max.replace(tzinfo=timezone.utc),
@@ -3466,6 +3496,9 @@ def main():
             redir.append("/football/%s /%s/%s/ 301" % (lg["slug"], sp, lg["slug"]))
             redir.append("/football/%s/* /%s/%s/:splat 301"
                          % (lg["slug"], sp, lg["slug"]))
+    # league rename: England Premier League -> English Premier League
+    redir.append("/football/england-premier-league /football/english-premier-league/ 301")
+    redir.append("/football/england-premier-league/* /football/english-premier-league/:splat 301")
     write_file("_redirects", "\n".join(redir) + "\n")
 
     # Pages Functions must live at the project root (repo root in CI),
