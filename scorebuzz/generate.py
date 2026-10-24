@@ -3221,28 +3221,18 @@ def main():
             STATS["scoreboards"] += 1
             if ddata and ddata.get("events"):
                 raw_events.extend(ddata["events"])
-        # 1b) forward fixtures: some ESPN boards (notably soccer leagues
-        # like eng.1) only expose the current US-Eastern day, so their
-        # league pages would show no schedule at all. If nothing fetched
-        # so far is an upcoming match dated after today (UTC), pull the
-        # next 7 days one day at a time (the range form returns HTTP 400).
-        _has_future = False
-        for ev in raw_events:
-            try:
-                if (ev.get("status", {}).get("type", {}).get("state") == "pre"
-                        and (ev.get("date") or "")[:10]
-                        > sb_now.strftime("%Y-%m-%d")):
-                    _has_future = True
-                    break
-            except Exception:
-                pass
-        if not _has_future:
-            for _n in range(1, 8):
-                _day = (sb_now + timedelta(days=_n)).strftime("%Y%m%d")
-                ddata = fetch_json(base + "?dates=" + _day)
-                STATS["scoreboards"] += 1
-                if ddata and ddata.get("events"):
-                    raw_events.extend(ddata["events"])
+        # 1b) forward fixtures: ESPN boards are day-scoped to varying
+        # degrees (audited 2026-10-24: 42 of 60 leagues miss fixtures
+        # that exist within 7 days; most soccer boards show none at
+        # all, and partial boards like MLS/NFL/NBA stop mid-week), so
+        # EVERY league gets its next 7 days pulled one day at a time
+        # (the range form returns HTTP 400). Dedupe happens below.
+        for _n in range(1, 8):
+            _day = (sb_now + timedelta(days=_n)).strftime("%Y%m%d")
+            ddata = fetch_json(base + "?dates=" + _day)
+            STATS["scoreboards"] += 1
+            if ddata and ddata.get("events"):
+                raw_events.extend(ddata["events"])
         if not raw_events:
             STATS["failed"] += 1
             STATS["failed_leagues"].append(lg["slug"])
