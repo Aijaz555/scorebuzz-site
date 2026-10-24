@@ -2239,7 +2239,7 @@ st=document.getElementById('sbzRadioSt');
 if(!bar||!btn)return;
 if(!('speechSynthesis' in window)){btn.disabled=true;
 st.textContent='Live radio is not supported in this browser.';return;}
-var on=false,seen={},queue=[],speaking=false,pollT=null;
+var on=false,seen={},queue=[],speaking=false,pollT=null,resumeT=null,lastSpokenAt=0,lastScore=(meta.hs!=null&&meta.as!=null)?(meta.home+' '+meta.hs+' - '+meta.as+' '+meta.away):'';
 var AC=null,crowdGain=null;
 function crowd(){try{
 AC=AC||new (window.AudioContext||window.webkitAudioContext)();
@@ -2261,14 +2261,19 @@ return v.lang&&v.lang.toLowerCase().indexOf('en')===0;});
 if(!vs.length)return null;
 for(var i=0;i<vs.length;i++){if(/google|natural|samantha/i.test(vs[i].name))return vs[i];}
 return vs[0];}
-function say(txt,cb){try{var u=new SpeechSynthesisUtterance(txt);
+function say(txt,cb){var done=false;
+function fin(){if(done)return;done=true;if(cb)cb();}
+try{var u=new SpeechSynthesisUtterance(txt);
 var v=pickVoice();if(v)u.voice=v;u.rate=1.06;u.pitch=1;
-u.onend=cb;u.onerror=cb;speechSynthesis.speak(u);}catch(e){if(cb)cb();}}
+u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);
+var ms=Math.min(60000,Math.max(8000,txt.length*80+4000));
+setTimeout(function(){if(!done){try{speechSynthesis.cancel();}catch(e){}fin();}},ms);
+}catch(e){fin();}}
 function playGoal(cb){try{var a=new Audio('/audio/goal-call.mp3');
 a.onended=cb;a.onerror=cb;var p=a.play();if(p&&p.catch)p.catch(cb);}
 catch(e){if(cb)cb();}}
 function next(){if(!on||speaking)return;var it=queue.shift();if(!it)return;
-speaking=true;
+speaking=true;lastSpokenAt=Date.now();
 if(it.goal){crowdTo(0.35,0.5);
 playGoal(function(){say(it.text,function(){crowdTo(0.06,3);
 speaking=false;next();});});}
@@ -2290,40 +2295,59 @@ if(gi<0)gi=0;queue.splice(gi,1);}
 next();}
 function sumUrl(){return '/api/'+meta.sport+'/'+meta.league+
 '/summary?event='+meta.event;}
-function endFT(){on=false;clearTimeout(pollT);speechSynthesis.cancel();
+function liveScore(d){try{var cs=(((d.header||{}).competitions||[])[0]||{}).competitors||[];
+var h=null,a=null,i;
+for(i=0;i<cs.length;i++){var nm=(cs[i].team||{}).displayName||'';
+if(nm===meta.home)h=cs[i].score;else if(nm===meta.away)a=cs[i].score;}
+if(h==null&&cs.length>1){h=cs[0].score;a=cs[1].score;}
+if(h==null||a==null)return null;
+return meta.home+' '+h+' - '+a+' '+meta.away;}catch(e){return null;}}
+function liveClock(d){try{var c0=(((d.header||{}).competitions||[])[0]||{}).status||{};
+var s=c0.displayClock||'';var mm=/(\d+)/.exec(s);return mm?mm[1]:'';}catch(e){return '';}}
+function endFT(){on=false;clearTimeout(pollT);clearInterval(resumeT);speechSynthesis.cancel();
 speaking=false;queue=[];crowdTo(0,1);btn.disabled=true;
 btn.textContent='\\uD83D\\uDCFB Live Radio: OFF';
-st.textContent='Full-time \u2014 radio has ended.';}
+st.textContent='Full-time \u2014 radio has ended.';if(lastScore)say('Full time. '+lastScore,function(){});}
 function poll(){if(!on)return;
 fetch(sumUrl()).then(function(x){return x.json();}).then(function(d){
 try{var c0=(((d.header||{}).competitions||[])[0]||{}).status||{};
 if((c0.type&&c0.type.completed)||c0.type==='STATUS_FINAL'){endFT();return;}}
 catch(e){}
+var sc=liveScore(d);
+if(sc&&sc!==lastScore){lastScore=sc;
+queue.push({text:sc,goal:false,bump:0.10});next();}
+if(on){var ck=liveClock(d);
+st.textContent='Live radio on · '+(ck?ck+"' minute · ":'')+(sc||lastScore);}
 var com=d.commentary||[],i;
 for(i=0;i<com.length;i++){if(com[i]&&com[i].text)push(com[i].text);}
 var ke=d.keyEvents||[];
 for(i=0;i<ke.length;i++){if(ke[i]&&ke[i].text&&/^goal!/i.test(ke[i].text))
 push(ke[i].text);}
+if(on&&lastSpokenAt>0&&Date.now()-lastSpokenAt>300000&&lastScore){
+var ck2=liveClock(d);
+queue.push({text:(ck2?ck2+' minutes played. ':'')+lastScore,goal:false,bump:0.05});next();}
 }).catch(function(){});
 pollT=setTimeout(poll,15000);}
 btn.onclick=function(){
-if(on){on=false;clearTimeout(pollT);speechSynthesis.cancel();
+if(on){on=false;clearTimeout(pollT);clearInterval(resumeT);speechSynthesis.cancel();
 speaking=false;queue=[];crowdTo(0,0.5);
 btn.innerHTML='\\uD83D\\uDCFB Live Radio: OFF';
 st.textContent='Radio off \u2014 tap to listen again.';
 bar.classList.remove('sbz-on');return;}
-on=true;crowd();
+on=true;crowd();resumeT=setInterval(function(){try{if(speechSynthesis.paused)speechSynthesis.resume();}catch(e){}},5000);
 btn.innerHTML='\\uD83D\\uDCFB Live Radio: ON <span class="sbz-dot"></span>';
 st.textContent='Live radio on \u2014 listening for the next moment\u2026';
 bar.classList.add('sbz-on');
 fetch(sumUrl()).then(function(x){return x.json();}).then(function(d){
 var com=d.commentary||[],texts=[],i;
 for(i=0;i<com.length;i++){if(com[i]&&com[i].text)texts.push(com[i].text);}
-for(i=0;i<Math.max(0,texts.length-2);i++)seen[texts[i]]=1;
-if(meta.hs!=null&&meta.as!=null)
+for(i=0;i<Math.max(0,texts.length-3);i++)seen[texts[i]]=1;
+var sc0=liveScore(d);
+if(sc0){lastScore=sc0;queue.push({text:sc0,goal:false,bump:0.05});}
+else if(meta.hs!=null&&meta.as!=null)
 queue.push({text:meta.home+' '+meta.hs+' - '+meta.as+' '+meta.away,
 goal:false,bump:0.05});
-for(i=Math.max(0,texts.length-2);i<texts.length;i++)push(texts[i]);
+for(i=Math.max(0,texts.length-3);i<texts.length;i++)push(texts[i]);
 next();}).catch(function(){});
 pollT=setTimeout(poll,15000);};
 })();
